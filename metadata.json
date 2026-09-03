@@ -1,0 +1,6 @@
+{
+  "name": "Kids Jump 4 Joy Management System",
+  "description": "Event management, quotation, booking, and inventory scheduling system for Kids Jump 4 Joy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
