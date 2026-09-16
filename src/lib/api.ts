@@ -80,6 +80,19 @@ export async function createCustomer(cust: Partial<Customer>): Promise<Customer>
   return res.json();
 }
 
+export async function updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer> {
+  const res = await fetch(`/api/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update customer');
+  }
+  return res.json();
+}
+
 export async function fetchQuotations(): Promise<Quotation[]> {
   const res = await fetch('/api/quotations');
   if (!res.ok) throw new Error('Failed to fetch quotations');
@@ -95,6 +108,31 @@ export async function createQuotation(data: any): Promise<Quotation> {
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Failed to create quotation');
+  }
+  return res.json();
+}
+
+export async function editQuotation(id: string, data: any): Promise<Quotation> {
+  const res = await fetch(`/api/quotations/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to edit quotation');
+  }
+  return res.json();
+}
+
+export async function duplicateQuotation(id: string): Promise<Quotation> {
+  const res = await fetch(`/api/quotations/${id}/duplicate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to duplicate quotation');
   }
   return res.json();
 }
@@ -155,6 +193,32 @@ export async function cancelBooking(id: string, reason?: string) {
     throw new Error(err.error || 'Failed to cancel booking');
   }
   return res.json();
+}
+
+export async function markBookingCompleted(id: string): Promise<Booking> {
+  const res = await fetch(`/api/bookings/${id}/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to mark booking as completed');
+  }
+  const data = await res.json();
+  return data.booking;
+}
+
+export async function generateInvoiceForBooking(id: string): Promise<Invoice> {
+  const res = await fetch(`/api/bookings/${id}/generate-invoice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to generate invoice');
+  }
+  const data = await res.json();
+  return data.invoice;
 }
 
 export async function fetchPayments(): Promise<Payment[]> {
@@ -223,3 +287,5 @@ export function generateWhatsAppUrl(phone: string, message: string): string {
   const cleanPhone = phone.replace(/[^0-9]/g, '');
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
+
+export * from './pricing.ts';

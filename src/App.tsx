@@ -79,6 +79,7 @@ export default function App() {
 
   // Modals state
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState<boolean>(false);
+  const [selectedCustomerForQuote, setSelectedCustomerForQuote] = useState<Customer | null>(null);
   const [previewModal, setPreviewModal] = useState<{
     isOpen: boolean;
     type: 'quotation' | 'invoice';
@@ -442,16 +443,25 @@ export default function App() {
               bookings={bookings}
               quotations={quotations}
               dailySchedule={dailySchedule}
-              onOpenQuotationBuilder={() => setIsQuotationModalOpen(true)}
+              payments={payments}
+              products={products}
+              onOpenQuotationBuilder={() => {
+                setSelectedCustomerForQuote(null);
+                setIsQuotationModalOpen(true);
+              }}
               onNavigateTab={(tab) => setCurrentTab(tab)}
               onPreviewQuotation={handleOpenQuotationPreview}
+              onRecordPayment={handleRecordPaymentForBooking}
             />
           )}
 
           {currentTab === 'quotations' && (
             <QuotationsList
               quotations={quotations}
-              onOpenBuilder={() => setIsQuotationModalOpen(true)}
+              onOpenBuilder={() => {
+                setSelectedCustomerForQuote(null);
+                setIsQuotationModalOpen(true);
+              }}
               onPreview={handleOpenQuotationPreview}
               onConfirmBooking={handleConfirmBookingFromQuote}
               onRefresh={loadAllData}
@@ -461,6 +471,7 @@ export default function App() {
           {currentTab === 'bookings' && (
             <BookingsList
               bookings={bookings}
+              invoices={invoices}
               onRecordPayment={handleRecordPaymentForBooking}
               onViewInvoice={handleOpenInvoicePreview}
               onRefresh={loadAllData}
@@ -470,19 +481,27 @@ export default function App() {
           {currentTab === 'availability' && (
             <AvailabilityCalendar
               onOpenQuotationBuilderForDate={(date) => {
+                setSelectedCustomerForQuote(null);
                 setIsQuotationModalOpen(true);
               }}
             />
           )}
 
-          {currentTab === 'schedule' && <DailyEquipmentView />}
+          {currentTab === 'schedule' && (
+            <DailyEquipmentView
+              onSelectBooking={(bNum) => {
+                setCurrentTab('bookings');
+              }}
+            />
+          )}
 
           {currentTab === 'invoices' && (
-            <InvoicesList
+            <BookingsList
+              bookings={bookings}
               invoices={invoices}
-              onPreviewInvoice={(inv) =>
-                setPreviewModal({ isOpen: true, type: 'invoice', data: inv })
-              }
+              onRecordPayment={handleRecordPaymentForBooking}
+              onViewInvoice={handleOpenInvoicePreview}
+              onRefresh={loadAllData}
             />
           )}
 
@@ -502,10 +521,16 @@ export default function App() {
             <CustomersManager
               customers={customers}
               bookings={bookings}
+              quotations={quotations}
+              payments={payments}
+              invoices={invoices}
               onRefresh={loadAllData}
               onSelectCustomerForQuote={(c) => {
+                setSelectedCustomerForQuote(c);
                 setIsQuotationModalOpen(true);
               }}
+              onViewInvoice={handleOpenInvoicePreview}
+              onRecordPayment={handleRecordPaymentForBooking}
             />
           )}
 
@@ -518,7 +543,11 @@ export default function App() {
       {/* 3-Step Quotation Builder Modal */}
       <QuotationBuilderModal
         isOpen={isQuotationModalOpen}
-        onClose={() => setIsQuotationModalOpen(false)}
+        initialCustomer={selectedCustomerForQuote}
+        onClose={() => {
+          setIsQuotationModalOpen(false);
+          setSelectedCustomerForQuote(null);
+        }}
         onSuccess={(newQuote) => {
           showToast(`Quotation ${newQuote.quotation_number} generated successfully!`);
           loadAllData();

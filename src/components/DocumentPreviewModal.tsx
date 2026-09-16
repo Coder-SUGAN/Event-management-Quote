@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
-import { X, Printer, Send, Mail, Download, CheckCircle, Clock } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Printer, Send, Mail, Download, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import type { Quotation, Invoice, CompanyTemplateSettings } from '../types.ts';
 import { formatCurrency, generateWhatsAppUrl } from '../lib/api.ts';
+import { downloadElementAsPdf } from '../lib/pdfGenerator.ts';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   templateSettings,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   if (!isOpen || !data) return null;
 
@@ -45,8 +47,27 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   const balance = isQuote ? quote?.remaining_balance || 0 : inv?.balance || 0;
   const depositReq = isQuote ? quote?.deposit_required || 0 : 0;
 
+  const eventDurationDisplay = isQuote
+    ? quote?.event_duration_formatted || `${(quote?.included_hours || 3) + (quote?.additional_hours || 0)} Hours`
+    : '3 Hours';
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!printRef.current) return;
+    try {
+      setIsDownloadingPdf(true);
+      const filename = `${docNumber || (isQuote ? 'Quotation' : 'Invoice')}.pdf`;
+      await downloadElementAsPdf(printRef.current, filename);
+    } catch (err) {
+      console.error('Failed to generate PDF download:', err);
+      // Fallback to browser print dialog
+      window.print();
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const shareText = isQuote
@@ -59,14 +80,14 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
       <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 my-8 print:border-none print:shadow-none print:my-0 print:w-full print:max-w-none">
         {/* Modal Top Control Bar (Hidden on Print) */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white print:hidden">
+        <div className="flex flex-wrap items-center justify-between px-6 py-4 bg-slate-900 text-white print:hidden gap-3">
           <div className="flex items-center space-x-3">
             <span className="text-xs font-semibold px-2.5 py-1 rounded bg-rose-500/20 text-rose-300 uppercase tracking-wider">
               {isQuote ? 'Quotation Preview' : 'Official Invoice Preview'}
             </span>
             <span className="text-sm text-slate-300 font-mono font-medium">{docNumber}</span>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center flex-wrap gap-2">
             {waUrl && (
               <a
                 href={waUrl}
@@ -75,16 +96,38 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
                 className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Send WhatsApp</span>
+                <span>WhatsApp</span>
               </a>
             )}
+
+            {/* Requirement 8: Clear Download Quotation button */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition shadow-sm disabled:opacity-50"
+            >
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isQuote ? 'Download Quotation' : 'Download Invoice'}</span>
+                </>
+              )}
+            </button>
+
+            {/* Requirement 8: Clear Print Quotation button */}
             <button
               onClick={handlePrint}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print / PDF</span>
+              <span>{isQuote ? 'Print Quotation' : 'Print Invoice'}</span>
             </button>
+
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition ml-2"
@@ -165,62 +208,144 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
           {/* Customer & Event Details Box */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8 p-5 bg-slate-50 rounded-xl border border-slate-200">
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-2">Billed To / Customer</p>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-2">Customer Details</p>
               <h3 className="text-base font-bold text-slate-900">{customerName}</h3>
-              <p className="text-xs text-slate-600 mt-1">Phone: {customerPhone}</p>
-              {customerEmail && <p className="text-xs text-slate-600">Email: {customerEmail}</p>}
-              {customerAddress && <p className="text-xs text-slate-600 mt-0.5">Address: {customerAddress}</p>}
+              <p className="text-xs text-slate-600 mt-1">Phone: <span className="text-slate-800 font-medium">{customerPhone}</span></p>
+              {customerEmail && <p className="text-xs text-slate-600">Email: <span className="text-slate-800 font-medium">{customerEmail}</span></p>}
+              {customerAddress && <p className="text-xs text-slate-600 mt-0.5">Address: <span className="text-slate-800 font-medium">{customerAddress}</span></p>}
             </div>
             <div>
-              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-2">Event Specifications</p>
+              <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-2">Event Details & Duration</p>
               <p className="text-xs text-slate-700">
                 <span className="font-semibold text-slate-900">Event Date:</span> {eventDate}
               </p>
               {isQuote && quote && (
-                <p className="text-xs text-slate-700">
-                  <span className="font-semibold text-slate-900">Operating Time:</span> {quote.event_start_time} to {quote.event_end_time}
-                </p>
+                <>
+                  <p className="text-xs text-slate-700 mt-0.5">
+                    <span className="font-semibold text-slate-900">Event Start Time:</span> {quote.event_start_time || '14:00'}
+                  </p>
+                  <p className="text-xs text-slate-700 mt-0.5">
+                    <span className="font-semibold text-slate-900">Event End Time:</span> {quote.event_end_time || '17:00'}
+                  </p>
+                  <p className="text-xs text-slate-700 mt-0.5">
+                    <span className="font-semibold text-slate-900">Total Event Duration:</span>{' '}
+                    <span className="font-bold text-slate-900">{eventDurationDisplay}</span>{' '}
+                    {(quote.additional_hours || 0) > 0 ? (
+                      <span className="text-amber-800 text-[11px] font-semibold">
+                        ({quote.included_hours || 3} hrs base included + {quote.additional_hours} additional {quote.additional_hours === 1 ? 'hour' : 'hours'})
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 text-[11px] font-semibold">
+                        (Up to 3 hours included)
+                      </span>
+                    )}
+                  </p>
+                </>
               )}
-              <p className="text-xs text-slate-700">
+              <p className="text-xs text-slate-700 mt-0.5">
                 <span className="font-semibold text-slate-900">Venue Location:</span> {eventLocation}
               </p>
               {isQuote && quote?.event_type && (
-                <p className="text-xs text-slate-700">
+                <p className="text-xs text-slate-700 mt-0.5">
                   <span className="font-semibold text-slate-900">Event Type:</span> {quote.event_type}
                 </p>
               )}
             </div>
           </div>
 
-          {/* Line Items Table */}
-          <div className="overflow-x-auto mb-8">
+          {/* Pricing Policy Note (Requirement 8) */}
+          <div className="mb-6 px-4 py-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center space-x-2">
+              <span className="font-bold text-amber-800">⏱️ Pricing Note:</span>
+              <span className="font-medium">
+                Equipment prices include up to 3 hours of usage. Additional hourly charges apply for usage beyond 3 hours.
+              </span>
+            </div>
+            {isQuote && (
+              <span className="font-bold text-slate-900 bg-white px-2.5 py-1 rounded-md border border-amber-200 text-[11px]">
+                Event Duration: {eventDurationDisplay}
+              </span>
+            )}
+          </div>
+
+          {/* Line Items Table (Requirement 8 & 9) */}
+          <div className="overflow-x-auto mb-8 border border-slate-200 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b-2 border-slate-800 text-slate-800">
-                  <th className="py-2.5 font-bold">#</th>
-                  <th className="py-2.5 font-bold">Equipment / Service Description</th>
-                  <th className="py-2.5 font-bold text-center">Qty</th>
-                  <th className="py-2.5 font-bold text-right">Unit Rate</th>
-                  <th className="py-2.5 font-bold text-right">Discount</th>
-                  <th className="py-2.5 font-bold text-right">Amount (LKR)</th>
+                <tr className="border-b-2 border-slate-800 bg-slate-50 text-slate-800">
+                  <th className="py-3 px-3 font-bold">#</th>
+                  <th className="py-3 px-3 font-bold">Selected Equipment & Duration Details</th>
+                  <th className="py-3 px-3 font-bold text-center">Quantity</th>
+                  <th className="py-3 px-3 font-bold text-right">Base Price (3h)</th>
+                  <th className="py-3 px-3 font-bold text-right">Additional Charge</th>
+                  <th className="py-3 px-3 font-bold text-right">Discount</th>
+                  <th className="py-3 px-3 font-bold text-right">Item Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {items.map((item, idx) => (
-                  <tr key={item.id || idx} className="hover:bg-slate-50/50">
-                    <td className="py-3 text-slate-400 font-mono">{idx + 1}</td>
-                    <td className="py-3">
-                      <p className="font-semibold text-slate-900">{item.product_name_snapshot}</p>
-                      {item.category && <p className="text-[11px] text-slate-500">{item.category}</p>}
-                    </td>
-                    <td className="py-3 text-center font-bold text-slate-800">{item.quantity}</td>
-                    <td className="py-3 text-right text-slate-700">{formatCurrency(item.unit_price)}</td>
-                    <td className="py-3 text-right text-rose-600">
-                      {item.discount > 0 ? `-${formatCurrency(item.discount)}` : '—'}
-                    </td>
-                    <td className="py-3 text-right font-bold text-slate-900">{formatCurrency(item.total)}</td>
-                  </tr>
-                ))}
+                {items.map((item, idx) => {
+                  const addHours = item.additional_hours || 0;
+                  const addRate = item.additional_hourly_rate || 0;
+                  const addTotal = addRate * addHours * item.quantity;
+                  const baseRate = item.base_price || item.unit_price;
+
+                  return (
+                    <tr key={item.id || idx} className="hover:bg-slate-50/50">
+                      <td className="py-3.5 px-3 text-slate-400 font-mono align-top">{idx + 1}</td>
+                      <td className="py-3.5 px-3 align-top">
+                        <p className="font-bold text-slate-900 text-sm">{item.product_name_snapshot}</p>
+                        {item.category && <p className="text-[11px] text-slate-500 mb-1.5">{item.category}</p>}
+                        
+                        {/* Requirement 9 breakdown card */}
+                        <div className="p-2 bg-slate-50 rounded-md border border-slate-200/80 text-[11px] space-y-0.5 text-slate-600">
+                          <div>Quantity: <span className="font-semibold text-slate-800">{item.quantity}</span></div>
+                          <div>Included Duration: <span className="font-semibold text-slate-800">3 Hours</span></div>
+                          <div>Event Duration: <span className="font-semibold text-slate-800">{eventDurationDisplay}</span></div>
+                          <div>
+                            Additional Hours:{' '}
+                            <span className={`font-semibold ${addHours > 0 ? 'text-amber-700' : 'text-slate-800'}`}>
+                              {addHours}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center align-top">
+                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-900 rounded font-bold font-mono text-xs">
+                          {item.quantity}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right align-top font-mono">
+                        <div className="font-bold text-slate-900">{formatCurrency(baseRate)}</div>
+                        <div className="text-[10px] text-slate-400">up to 3 hours</div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right align-top font-mono">
+                        {addHours > 0 ? (
+                          <>
+                            <div className="font-bold text-amber-700">+{formatCurrency(addTotal)}</div>
+                            <div className="text-[10px] text-amber-800 font-sans">
+                              {formatCurrency(addRate)} × {addHours} hr{addHours > 1 ? 's' : ''}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-[11px] text-emerald-700 font-sans font-medium">
+                            Rs. 0 (included)
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right align-top text-rose-600 font-mono">
+                        {item.discount > 0 ? `-${formatCurrency(item.discount)}` : '—'}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right align-top font-bold text-slate-900 font-mono text-sm">
+                        {formatCurrency(item.total)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -263,13 +388,13 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
               )}
               {setupFee > 0 && (
                 <div className="flex justify-between text-slate-600">
-                  <span>Setup & Installation:</span>
+                  <span>Setup & Labor Fee:</span>
                   <span className="font-medium text-slate-900">{formatCurrency(setupFee)}</span>
                 </div>
               )}
               {otherCharges > 0 && (
                 <div className="flex justify-between text-slate-600">
-                  <span>Transport / Other:</span>
+                  <span>Transport / Distance:</span>
                   <span className="font-medium text-slate-900">{formatCurrency(otherCharges)}</span>
                 </div>
               )}
@@ -280,7 +405,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
                 </div>
               )}
               <div className="pt-3 border-t border-slate-300 flex justify-between items-baseline">
-                <span className="text-sm font-bold text-slate-900">Total Net Amount:</span>
+                <span className="text-sm font-bold text-slate-900">Final Total:</span>
                 <span
                   className="text-lg font-black"
                   style={{ color: templateSettings.primary_color || '#e11d48' }}
@@ -292,11 +417,11 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
               {isQuote ? (
                 <>
                   <div className="pt-2 border-t border-dashed border-slate-200 flex justify-between text-amber-800 font-semibold">
-                    <span>50% Advance Required:</span>
+                    <span>50% Advance Deposit Required:</span>
                     <span>{formatCurrency(depositReq)}</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
-                    <span>Balance On Setup:</span>
+                    <span>Balance On Event Setup:</span>
                     <span>{formatCurrency(balance)}</span>
                   </div>
                 </>

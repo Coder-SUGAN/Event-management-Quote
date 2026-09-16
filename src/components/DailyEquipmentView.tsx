@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   Download,
+  Printer,
+  FileSpreadsheet,
   CheckSquare,
   Square,
   Clock,
@@ -11,6 +13,8 @@ import {
   Package,
   Layers,
   Sparkles,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import type { DailyScheduleEntry } from '../types.ts';
 import { fetchDailySchedule, fetchDailyEquipmentSummary } from '../lib/api.ts';
@@ -19,7 +23,7 @@ interface DailyEquipmentViewProps {
   onSelectBooking?: (bookingNumber: string) => void;
 }
 
-export const DailyEquipmentView: React.FC<DailyEquipmentViewProps> = () => {
+export const DailyEquipmentView: React.FC<DailyEquipmentViewProps> = ({ onSelectBooking }) => {
   // Default to sample seed date or today's date
   const [selectedDate, setSelectedDate] = useState<string>('2026-09-15');
   const [scheduleItems, setScheduleItems] = useState<DailyScheduleEntry[]>([]);
@@ -55,26 +59,50 @@ export const DailyEquipmentView: React.FC<DailyEquipmentViewProps> = () => {
     window.open('/api/schedule/export-excel', '_blank');
   };
 
+  const handlePrintSchedule = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       {/* Top action header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Daily Equipment & Dispatch Schedule
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2">
+            <span>Event Schedule</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Automated daily gear requirements, logistics packing checklist, and Excel export.
+            Daily event operations, equipment dispatch checklists, and operational exports.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        {/* Operational Actions: Export to Excel, Print, Download */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleExportExcel}
-            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+            className="inline-flex items-center space-x-2 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+            title="Download multi-sheet Microsoft Excel workbook"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export to Excel</span>
+          </button>
+
+          <button
+            onClick={handlePrintSchedule}
+            className="inline-flex items-center space-x-2 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition"
+            title="Print daily operational packing sheet"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print Schedule</span>
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            className="inline-flex items-center space-x-2 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-xl shadow-2xs transition"
+            title="Download Schedule File"
           >
             <Download className="w-4 h-4" />
-            <span>Download Multi-Sheet Excel</span>
+            <span>Download</span>
           </button>
         </div>
       </div>
@@ -277,3 +305,5 @@ export const DailyEquipmentView: React.FC<DailyEquipmentViewProps> = () => {
     </div>
   );
 };
+
+export const EventSchedule = DailyEquipmentView;

@@ -31,9 +31,9 @@ export const PaymentsList: React.FC<PaymentsListProps> = ({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Payment Records</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Payments</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Track bank deposits, cash payments, and customer receipts.
+            Track bank deposits, cash advances, customer receipts, and invoice settlements.
           </p>
         </div>
 

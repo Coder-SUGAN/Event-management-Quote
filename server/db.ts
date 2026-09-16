@@ -14,6 +14,7 @@ import type {
   DashboardStats,
   LineItem,
 } from '../src/types.ts';
+import { calculateEventDuration, calculateItemTotal } from '../src/lib/pricing.ts';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -72,6 +73,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Bouncy Castles',
       total_quantity: 3,
       unit_price: 25000,
+      additional_hourly_rate: 5000,
       description: '15ft x 15ft heavy duty castle with slide, holds up to 10 kids (ages 4-12)',
       dimensions: '15ft x 15ft x 13ft',
       power_required: '1.5HP Blower (230V)',
@@ -83,6 +85,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Bouncy Castles',
       total_quantity: 5,
       unit_price: 15000,
+      additional_hourly_rate: 3000,
       description: '10ft x 10ft toddler safe castle, holds up to 6 toddlers (ages 2-6)',
       dimensions: '10ft x 10ft x 9ft',
       power_required: '1.0HP Blower (230V)',
@@ -94,6 +97,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Bouncy Castles',
       total_quantity: 2,
       unit_price: 35000,
+      additional_hourly_rate: 7000,
       description: 'Giant dual-lane water slide with splash pool, perfect for outdoor summer parties',
       dimensions: '22ft x 12ft x 15ft',
       power_required: '2.0HP Blower (230V)',
@@ -105,6 +109,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Power & Generators',
       total_quantity: 2,
       unit_price: 8500,
+      additional_hourly_rate: 1500,
       description: 'Silent diesel generator with fuel included for 6 hours, runs 2 large blowers',
       power_required: 'Self-powered (Diesel)',
       status: 'active',
@@ -115,6 +120,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Power & Generators',
       total_quantity: 1,
       unit_price: 14000,
+      additional_hourly_rate: 2500,
       description: 'Heavy duty generator for multiple inflatables and sound system',
       power_required: 'Self-powered (Diesel)',
       status: 'active',
@@ -125,6 +131,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Tables & Chairs',
       total_quantity: 50,
       unit_price: 400,
+      additional_hourly_rate: 50,
       description: 'Heavy duty 6ft folding banquet table, seats 6-8 kids or adults',
       status: 'active',
     },
@@ -134,6 +141,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Tables & Chairs',
       total_quantity: 200,
       unit_price: 100,
+      additional_hourly_rate: 20,
       description: 'Comfortable stackable resin chairs for guests and children',
       status: 'active',
     },
@@ -143,6 +151,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Party Machines',
       total_quantity: 3,
       unit_price: 12000,
+      additional_hourly_rate: 2500,
       description: 'Commercial vintage cart popcorn machine with 100 servings + dedicated operator',
       power_required: '1200W (230V)',
       status: 'active',
@@ -153,6 +162,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Party Machines',
       total_quantity: 3,
       unit_price: 12000,
+      additional_hourly_rate: 2500,
       description: 'Carnival style cotton candy machine with 100 servings in assorted flavors',
       power_required: '1000W (230V)',
       status: 'active',
@@ -163,6 +173,7 @@ function getInitialData(): DatabaseSchema {
       category: 'Sound & Audio',
       total_quantity: 2,
       unit_price: 15000,
+      additional_hourly_rate: 3000,
       description: '2 active speakers, mixer, 2 wireless mics, Bluetooth and aux inputs',
       power_required: '500W (230V)',
       status: 'active',
@@ -691,6 +702,33 @@ class DatabaseStore {
         // Ensure template_settings and counters exist
         if (!parsed.template_settings) parsed.template_settings = DEFAULT_TEMPLATES;
         if (!parsed.counters) parsed.counters = { quotation: 3, booking: 2, invoice: 2 };
+        // Ensure all products have additional_hourly_rate
+        if (Array.isArray(parsed.products)) {
+          const defaultRates: Record<string, number> = {
+            prod_1: 5000,
+            prod_2: 3000,
+            prod_3: 7000,
+            prod_4: 1500,
+            prod_5: 2500,
+            prod_6: 50,
+            prod_7: 20,
+            prod_8: 2500,
+            prod_9: 2500,
+            prod_10: 3000,
+          };
+          parsed.products.forEach((p: any) => {
+            if (p.additional_hourly_rate === undefined || p.additional_hourly_rate === null || isNaN(p.additional_hourly_rate)) {
+              p.additional_hourly_rate = defaultRates[p.id] ?? Math.round((Number(p.unit_price) || 0) * 0.2);
+            }
+          });
+        }
+        // Ensure all quotations have version and version_history
+        if (Array.isArray(parsed.quotations)) {
+          parsed.quotations.forEach((q: any) => {
+            if (!q.version) q.version = 1;
+            if (!q.version_history) q.version_history = [];
+          });
+        }
         return parsed;
       }
     } catch (err) {
@@ -832,7 +870,14 @@ class DatabaseStore {
       special_requirements: string;
       notes: string;
     };
-    items: Array<{ product_id: string; quantity: number; unit_price: number; discount: number; category?: string }>;
+    items: Array<{
+      product_id: string;
+      quantity: number;
+      unit_price: number;
+      additional_hourly_rate?: number;
+      discount: number;
+      category?: string;
+    }>;
     charges: {
       delivery_fee: number;
       setup_fee: number;
@@ -871,13 +916,28 @@ class DatabaseStore {
       }
     }
 
-    // 3. Build line items with snapshot details
+    // 3. Build line items with snapshot details and duration-based pricing
+    const durationInfo = calculateEventDuration(input.event.start_time, input.event.end_time);
+    if (!durationInfo.isValid) {
+      throw new Error(durationInfo.error || 'End time must be later than start time.');
+    }
+
     const lineItems: LineItem[] = input.items.map((it, idx) => {
       const prod = this.getProduct(it.product_id);
       const unit_price = Number(it.unit_price ?? prod?.unit_price ?? 0);
+      const additional_hourly_rate = Number(
+        it.additional_hourly_rate ?? prod?.additional_hourly_rate ?? 0
+      );
+      const qty = Math.max(1, Number(it.quantity || 1));
       const discount = Number(it.discount ?? 0);
-      const qty = Number(it.quantity);
-      const total = Math.max(0, qty * unit_price - discount);
+
+      const pricing = calculateItemTotal(
+        unit_price,
+        additional_hourly_rate,
+        qty,
+        durationInfo.additionalHours,
+        discount
+      );
 
       return {
         id: `qitem_${Date.now()}_${idx}`,
@@ -885,8 +945,13 @@ class DatabaseStore {
         product_name_snapshot: prod?.name || 'Custom Product',
         quantity: qty,
         unit_price,
+        base_price: unit_price,
+        additional_hourly_rate,
+        additional_hours: durationInfo.additionalHours,
+        base_total: pricing.baseTotal,
+        additional_total: pricing.additionalTotal,
         discount,
-        total,
+        total: pricing.total,
         category: prod?.category || 'General',
       };
     });
@@ -917,6 +982,8 @@ class DatabaseStore {
     const quotation: Quotation = {
       id: `qt_${Date.now()}`,
       quotation_number,
+      version: 1,
+      version_history: [],
       customer_id: custId,
       customer_name: input.customer.name,
       customer_phone: input.customer.phone,
@@ -926,6 +993,10 @@ class DatabaseStore {
       event_date: input.event.date,
       event_start_time: input.event.start_time,
       event_end_time: input.event.end_time,
+      event_duration_minutes: durationInfo.totalMinutes,
+      event_duration_formatted: durationInfo.formattedDuration,
+      included_hours: 3,
+      additional_hours: durationInfo.additionalHours,
       event_location: input.event.location,
       event_type: input.event.type,
       number_of_guests: Number(input.event.number_of_guests || 0),
@@ -950,6 +1021,216 @@ class DatabaseStore {
     this.data.quotations.unshift(quotation);
     this.save();
     return quotation;
+  }
+
+  public editQuotation(
+    id: string,
+    input: {
+      customer?: { name?: string; phone?: string; whatsapp?: string; email?: string; address?: string };
+      event?: {
+        date?: string;
+        start_time?: string;
+        end_time?: string;
+        location?: string;
+        type?: string;
+        number_of_guests?: number;
+        special_requirements?: string;
+        notes?: string;
+      };
+      items?: Array<{
+        product_id: string;
+        quantity: number;
+        unit_price: number;
+        additional_hourly_rate?: number;
+        discount?: number;
+        category?: string;
+      }>;
+      charges?: {
+        delivery_fee?: number;
+        setup_fee?: number;
+        transport_fee?: number;
+        other_charges?: number;
+        discount?: number;
+        deposit_required?: number;
+      };
+      notes?: string;
+      terms_and_conditions?: string;
+      status?: Quotation['status'];
+      change_summary?: string;
+      changed_by?: string;
+    }
+  ): Quotation {
+    const quote = this.data.quotations.find((q) => q.id === id || q.quotation_number === id);
+    if (!quote) throw new Error('Quotation not found');
+
+    // Archive current version into version_history
+    const currentVersionNum = quote.version || 1;
+    const historyEntry = {
+      version: currentVersionNum,
+      created_at: quote.updated_at || quote.created_at,
+      created_by: input.changed_by || 'Admin',
+      change_summary:
+        input.change_summary ||
+        (currentVersionNum === 1 ? 'Original quotation' : `Revision for Version ${currentVersionNum}`),
+      items: JSON.parse(JSON.stringify(quote.items)),
+      subtotal: quote.subtotal,
+      delivery_fee: quote.delivery_fee,
+      setup_fee: quote.setup_fee,
+      transport_fee: quote.transport_fee,
+      other_charges: quote.other_charges,
+      discount: quote.discount,
+      total_amount: quote.total_amount,
+      deposit_required: quote.deposit_required,
+      remaining_balance: quote.remaining_balance,
+      event_date: quote.event_date,
+      event_start_time: quote.event_start_time,
+      event_end_time: quote.event_end_time,
+      event_duration_minutes: quote.event_duration_minutes,
+      event_duration_formatted: quote.event_duration_formatted,
+      included_hours: quote.included_hours,
+      additional_hours: quote.additional_hours,
+      event_location: quote.event_location,
+      event_type: quote.event_type,
+      number_of_guests: quote.number_of_guests,
+      special_requirements: quote.special_requirements,
+      notes: quote.notes,
+      terms_and_conditions: quote.terms_and_conditions,
+      status: quote.status,
+    };
+
+    quote.version_history = quote.version_history || [];
+    quote.version_history.unshift(historyEntry);
+    quote.version = currentVersionNum + 1;
+
+    // Apply customer changes
+    if (input.customer) {
+      if (input.customer.name) quote.customer_name = input.customer.name;
+      if (input.customer.phone) quote.customer_phone = input.customer.phone;
+      if (input.customer.whatsapp) quote.customer_whatsapp = input.customer.whatsapp;
+      if (input.customer.email !== undefined) quote.customer_email = input.customer.email;
+      if (input.customer.address !== undefined) quote.customer_address = input.customer.address;
+    }
+
+    // Apply event changes
+    if (input.event) {
+      if (input.event.date) quote.event_date = input.event.date;
+      if (input.event.start_time) quote.event_start_time = input.event.start_time;
+      if (input.event.end_time) quote.event_end_time = input.event.end_time;
+      if (input.event.location) quote.event_location = input.event.location;
+      if (input.event.type) quote.event_type = input.event.type;
+      if (input.event.number_of_guests !== undefined) quote.number_of_guests = input.event.number_of_guests;
+      if (input.event.special_requirements !== undefined)
+        quote.special_requirements = input.event.special_requirements;
+      if (input.event.notes !== undefined) quote.notes = input.event.notes;
+    }
+
+    // Recalculate event duration
+    const durationInfo = calculateEventDuration(quote.event_start_time, quote.event_end_time);
+    quote.event_duration_minutes = durationInfo.totalMinutes;
+    quote.event_duration_formatted = durationInfo.formattedDuration;
+    quote.included_hours = 3;
+    quote.additional_hours = durationInfo.additionalHours;
+
+    // Rebuild line items if updated items are provided
+    if (input.items && Array.isArray(input.items)) {
+      quote.items = input.items.map((it, idx) => {
+        const prod = this.getProduct(it.product_id);
+        const unit_price = Number(it.unit_price ?? prod?.unit_price ?? 0);
+        const additional_hourly_rate = Number(
+          it.additional_hourly_rate ?? prod?.additional_hourly_rate ?? 0
+        );
+        const qty = Math.max(1, Number(it.quantity || 1));
+        const discount = Number(it.discount ?? 0);
+        const pricing = calculateItemTotal(
+          unit_price,
+          additional_hourly_rate,
+          qty,
+          durationInfo.additionalHours,
+          discount
+        );
+
+        return {
+          id: (it as any).id || `qitem_${Date.now()}_${idx}`,
+          product_id: it.product_id,
+          product_name_snapshot: prod?.name || (it as any).product_name_snapshot || 'Rental Equipment',
+          quantity: qty,
+          unit_price,
+          base_price: unit_price,
+          additional_hourly_rate,
+          additional_hours: durationInfo.additionalHours,
+          base_total: pricing.baseTotal,
+          additional_total: pricing.additionalTotal,
+          discount,
+          total: pricing.total,
+          category: prod?.category || (it as any).category || 'General',
+        };
+      });
+    }
+
+    // Recalculate financial totals
+    const subtotal = quote.items.reduce((sum, item) => sum + item.total, 0);
+    const delivery_fee =
+      input.charges?.delivery_fee !== undefined ? Number(input.charges.delivery_fee) : quote.delivery_fee;
+    const setup_fee =
+      input.charges?.setup_fee !== undefined ? Number(input.charges.setup_fee) : quote.setup_fee;
+    const transport_fee =
+      input.charges?.transport_fee !== undefined ? Number(input.charges.transport_fee) : quote.transport_fee;
+    const other_charges =
+      input.charges?.other_charges !== undefined ? Number(input.charges.other_charges) : quote.other_charges;
+    const discount =
+      input.charges?.discount !== undefined ? Number(input.charges.discount) : quote.discount;
+    const total_amount = Math.max(0, subtotal + delivery_fee + setup_fee + transport_fee + other_charges - discount);
+    const deposit_required =
+      input.charges?.deposit_required !== undefined
+        ? Number(input.charges.deposit_required)
+        : Math.round(total_amount * 0.5);
+    const remaining_balance = Math.max(0, total_amount - deposit_required);
+
+    quote.subtotal = subtotal;
+    quote.delivery_fee = delivery_fee;
+    quote.setup_fee = setup_fee;
+    quote.transport_fee = transport_fee;
+    quote.other_charges = other_charges;
+    quote.discount = discount;
+    quote.total_amount = total_amount;
+    quote.deposit_required = deposit_required;
+    quote.remaining_balance = remaining_balance;
+
+    if (input.notes !== undefined) quote.notes = input.notes;
+    if (input.terms_and_conditions !== undefined) quote.terms_and_conditions = input.terms_and_conditions;
+
+    // Status: default to Revised or the explicitly provided status
+    quote.status = input.status || 'Revised';
+    quote.updated_at = new Date().toISOString();
+
+    this.save();
+    return quote;
+  }
+
+  public duplicateQuotation(id: string): Quotation {
+    const orig = this.getQuotation(id);
+    if (!orig) throw new Error('Quotation not found');
+
+    this.data.counters.quotation += 1;
+    const year = new Date().getFullYear();
+    const seq = String(this.data.counters.quotation).padStart(5, '0');
+    const quotation_number = `QT-${year}-${seq}`;
+
+    const newQuote: Quotation = {
+      ...JSON.parse(JSON.stringify(orig)),
+      id: `qt_${Date.now()}`,
+      quotation_number,
+      version: 1,
+      version_history: [],
+      status: 'Draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      converted_booking_id: undefined,
+    };
+
+    this.data.quotations.unshift(newQuote);
+    this.save();
+    return newQuote;
   }
 
   public updateQuotationStatus(id: string, status: Quotation['status']): Quotation {
@@ -1022,6 +1303,7 @@ class DatabaseStore {
       booking_number,
       quotation_id: quotation.id,
       quotation_number: quotation.quotation_number,
+      accepted_quotation_version: quotation.version || 1,
       customer_id: quotation.customer_id,
       customer_name: quotation.customer_name,
       customer_phone: quotation.customer_phone,
@@ -1031,6 +1313,10 @@ class DatabaseStore {
       event_date: quotation.event_date,
       event_start_time: quotation.event_start_time,
       event_end_time: quotation.event_end_time,
+      event_duration_minutes: quotation.event_duration_minutes,
+      event_duration_formatted: quotation.event_duration_formatted,
+      included_hours: quotation.included_hours ?? 3,
+      additional_hours: quotation.additional_hours ?? 0,
       event_location: quotation.event_location,
       event_type: quotation.event_type,
       number_of_guests: quotation.number_of_guests,
@@ -1127,8 +1413,9 @@ class DatabaseStore {
       });
     }
 
-    // 6. Update Quotation status
+    // 6. Update Quotation status and reference
     quotation.status = 'Converted to Booking';
+    quotation.converted_booking_id = booking.id;
     quotation.updated_at = new Date().toISOString();
 
     // 7. Save into bookings and invoices
@@ -1231,6 +1518,74 @@ class DatabaseStore {
 
     this.save();
     return booking;
+  }
+
+  public markBookingCompleted(id: string): Booking {
+    const booking = this.data.bookings.find((b) => b.id === id);
+    if (!booking) throw new Error('Booking not found');
+
+    booking.status = 'Completed';
+    booking.updated_at = new Date().toISOString();
+
+    this.data.daily_schedule.forEach((s) => {
+      if (s.booking_id === booking.id) {
+        s.status = 'Completed';
+        s.updated_at = new Date().toISOString();
+      }
+    });
+
+    this.save();
+    return booking;
+  }
+
+  public generateInvoiceForBooking(bookingId: string): Invoice {
+    const booking = this.data.bookings.find((b) => b.id === bookingId);
+    if (!booking) throw new Error('Booking not found');
+
+    // Return existing invoice if already generated
+    const existing = this.data.invoices.find((i) => i.booking_id === booking.id);
+    if (existing) return existing;
+
+    this.data.counters.invoice += 1;
+    const year = new Date().getFullYear();
+    const invoiceSeq = String(this.data.counters.invoice).padStart(5, '0');
+    const invoice_number = `INV-${year}-${invoiceSeq}`;
+
+    const invoice: Invoice = {
+      id: `inv_${Date.now()}`,
+      invoice_number,
+      booking_id: booking.id,
+      booking_number: booking.booking_number,
+      quotation_id: booking.quotation_id,
+      customer_id: booking.customer_id,
+      customer_name: booking.customer_name,
+      customer_phone: booking.customer_phone,
+      customer_email: booking.customer_email,
+      customer_address: booking.customer_address,
+      event_date: booking.event_date,
+      event_location: booking.event_location,
+      items: JSON.parse(JSON.stringify(booking.items)),
+      subtotal: booking.subtotal,
+      delivery_fee: booking.delivery_fee,
+      setup_fee: booking.setup_fee,
+      transport_fee: booking.transport_fee,
+      other_charges: booking.other_charges,
+      discount: booking.discount,
+      total: booking.total_amount,
+      amount_paid: booking.amount_paid,
+      balance: booking.balance,
+      payment_method: 'Bank Transfer',
+      payment_date: new Date().toISOString().split('T')[0],
+      status: booking.payment_status === 'Paid' ? 'Paid' : booking.payment_status === 'Partially Paid' ? 'Partially Paid' : 'Unpaid',
+      created_at: new Date().toISOString(),
+    };
+
+    booking.invoice_number = invoice_number;
+    booking.updated_at = new Date().toISOString();
+
+    this.data.invoices.unshift(invoice);
+    this.save();
+    return invoice;
   }
 
   // --- Payments (Requirement #12) ---

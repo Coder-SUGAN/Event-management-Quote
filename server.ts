@@ -51,7 +51,7 @@ app.get('/api/products', (req, res) => {
 
 app.post('/api/products', (req, res) => {
   try {
-    const { name, category, total_quantity, unit_price, description, dimensions, power_required } = req.body;
+    const { name, category, total_quantity, unit_price, additional_hourly_rate, description, dimensions, power_required } = req.body;
     if (!name || total_quantity === undefined || unit_price === undefined) {
       return res.status(400).json({ error: 'Name, total_quantity, and unit_price are required' });
     }
@@ -60,6 +60,7 @@ app.post('/api/products', (req, res) => {
       category: category || 'General',
       total_quantity: Number(total_quantity),
       unit_price: Number(unit_price),
+      additional_hourly_rate: Number(additional_hourly_rate || 0),
       description: description || '',
       dimensions: dimensions || '',
       power_required: power_required || '',
@@ -176,6 +177,24 @@ app.post('/api/quotations', (req, res) => {
   }
 });
 
+app.put('/api/quotations/:id', (req, res) => {
+  try {
+    const updated = db.editQuotation(req.params.id, req.body);
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/quotations/:id/duplicate', (req, res) => {
+  try {
+    const duplicated = db.duplicateQuotation(req.params.id);
+    res.status(201).json(duplicated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.patch('/api/quotations/:id/status', (req, res) => {
   try {
     const { status } = req.body;
@@ -246,6 +265,30 @@ app.post('/api/bookings/:id/cancel', (req, res) => {
     res.json({
       message: 'Booking cancelled. Equipment has been released and made available again.',
       booking: cancelled,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/bookings/:id/complete', (req, res) => {
+  try {
+    const completed = db.markBookingCompleted(req.params.id);
+    res.json({
+      message: 'Booking marked as completed successfully.',
+      booking: completed,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/bookings/:id/generate-invoice', (req, res) => {
+  try {
+    const invoice = db.generateInvoiceForBooking(req.params.id);
+    res.json({
+      message: 'Invoice generated successfully.',
+      invoice,
     });
   } catch (error: any) {
     res.status(400).json({ error: error.message });

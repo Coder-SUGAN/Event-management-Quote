@@ -3,17 +3,13 @@ import {
   LayoutDashboard,
   FileText,
   CalendarCheck,
-  Calendar,
+  CalendarDays,
   Layers,
-  FileSpreadsheet,
-  FileCheck2,
   CreditCard,
   Package,
   Users,
   Sliders,
   Plus,
-  Sparkles,
-  Database,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,17 +27,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
+  // Navigation structure specified by user:
+  // 1. Dashboard
+  // 2. Quotations
+  // 3. Confirmed Bookings
+  // 4. Customers
+  // 5. Event Schedule
+  // 6. Equipment Availability
+  // 7. Payments
+  // 8. Equipment Inventory
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'quotations', label: 'Quotations', icon: FileText },
     { id: 'bookings', label: 'Confirmed Bookings', icon: CalendarCheck },
-    { id: 'availability', label: 'Equipment Availability', icon: Calendar },
-    { id: 'schedule', label: 'Daily Schedule & Excel', icon: FileSpreadsheet },
-    { id: 'invoices', label: 'Official Invoices', icon: FileCheck2 },
-    { id: 'payments', label: 'Payment Records', icon: CreditCard },
+    { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'schedule', label: 'Event Schedule', icon: CalendarDays },
+    { id: 'availability', label: 'Equipment Availability', icon: Layers },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'products', label: 'Equipment Inventory', icon: Package },
-    { id: 'customers', label: 'Customer Directory', icon: Users },
-    { id: 'templates', label: 'Template Customizer', icon: Sliders },
   ];
 
   return (
@@ -114,8 +117,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Database & System Info Footer */}
-        <div className="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-1.5">
-          <div className="flex items-center space-x-2 text-emerald-400 font-medium">
+        <div className="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
+          <button
+            onClick={() => {
+              onSelectTab('templates');
+              onCloseMobile();
+            }}
+            className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition ${
+              currentTab === 'templates'
+                ? 'bg-rose-600/30 text-rose-300 border border-rose-500/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Invoice & Quotation Settings</span>
+          </button>
+
+          <div className="flex items-center space-x-2 text-emerald-400 font-medium pt-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>Supabase / Node.js Synced</span>
           </div>

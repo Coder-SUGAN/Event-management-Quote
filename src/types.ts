@@ -1,6 +1,9 @@
 export type QuotationStatus = 
   | 'Draft' 
   | 'Sent' 
+  | 'Customer Reviewing'
+  | 'Changes Requested'
+  | 'Revised'
   | 'Accepted' 
   | 'Rejected' 
   | 'Expired' 
@@ -34,6 +37,8 @@ export interface Customer {
   whatsapp: string;
   email: string;
   address: string;
+  billing_details?: string;
+  notes?: string;
   created_at: string;
 }
 
@@ -42,7 +47,8 @@ export interface Product {
   name: string;
   category: string;
   total_quantity: number;
-  unit_price: number;
+  unit_price: number; // Base price for up to 3 hours
+  additional_hourly_rate: number; // Additional rate per hour beyond 3 hours
   description?: string;
   dimensions?: string;
   power_required?: string;
@@ -62,15 +68,53 @@ export interface LineItem {
   product_id: string;
   product_name_snapshot: string;
   quantity: number;
-  unit_price: number;
+  unit_price: number; // Base rate for up to 3 hours
+  base_price?: number; // Base rate for up to 3 hours
+  additional_hourly_rate?: number; // Additional rate per hour beyond 3 hours
+  additional_hours?: number; // Additional hours billed beyond 3 hours
+  base_total?: number; // base_price * quantity
+  additional_total?: number; // additional_hourly_rate * additional_hours * quantity
   discount: number;
   total: number;
   category?: string;
 }
 
+export interface QuotationVersion {
+  version: number;
+  created_at: string;
+  created_by: string;
+  change_summary: string;
+  items: LineItem[];
+  subtotal: number;
+  delivery_fee: number;
+  setup_fee: number;
+  transport_fee: number;
+  other_charges: number;
+  discount: number;
+  total_amount: number;
+  deposit_required: number;
+  remaining_balance: number;
+  event_date: string;
+  event_start_time: string;
+  event_end_time: string;
+  event_duration_minutes?: number;
+  event_duration_formatted?: string;
+  included_hours?: number;
+  additional_hours?: number;
+  event_location: string;
+  event_type?: string;
+  number_of_guests?: number;
+  special_requirements?: string;
+  notes?: string;
+  terms_and_conditions?: string;
+  status: QuotationStatus;
+}
+
 export interface Quotation {
   id: string;
   quotation_number: string;
+  version: number;
+  version_history?: QuotationVersion[];
   customer_id: string;
   customer_name: string;
   customer_phone: string;
@@ -80,11 +124,16 @@ export interface Quotation {
   event_date: string; // YYYY-MM-DD
   event_start_time: string; // HH:mm
   event_end_time: string; // HH:mm
+  event_duration_minutes?: number;
+  event_duration_formatted?: string;
+  included_hours?: number;
+  additional_hours?: number;
   event_location: string;
   event_type: string;
   number_of_guests: number;
   special_requirements: string;
   notes: string;
+  terms_and_conditions?: string;
   items: LineItem[];
   subtotal: number;
   delivery_fee: number;
@@ -99,6 +148,7 @@ export interface Quotation {
   valid_until: string;
   created_at: string;
   updated_at: string;
+  converted_booking_id?: string;
 }
 
 export interface Booking {
@@ -106,6 +156,7 @@ export interface Booking {
   booking_number: string;
   quotation_id?: string;
   quotation_number?: string;
+  accepted_quotation_version?: number;
   customer_id: string;
   customer_name: string;
   customer_phone: string;
@@ -115,6 +166,10 @@ export interface Booking {
   event_date: string;
   event_start_time: string;
   event_end_time: string;
+  event_duration_minutes?: number;
+  event_duration_formatted?: string;
+  included_hours?: number;
+  additional_hours?: number;
   event_location: string;
   event_type: string;
   number_of_guests: number;

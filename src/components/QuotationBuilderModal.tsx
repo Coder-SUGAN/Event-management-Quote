@@ -14,20 +14,25 @@ import {
   ChevronLeft,
   DollarSign,
   Search,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 import type { Customer, Product, ItemAvailability, LineItem } from '../types.ts';
 import { fetchCustomers, fetchAvailability, createQuotation, formatCurrency } from '../lib/api.ts';
+import { calculateEventDuration, calculateItemTotal, calculateSingleItemPricing } from '../lib/pricing.ts';
 
 interface QuotationBuilderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (newQuotation: any) => void;
+  initialCustomer?: Customer | null;
 }
 
 export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  initialCustomer,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
@@ -44,7 +49,7 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const [eventDate, setEventDate] = useState<string>(tomorrow);
   const [startTime, setStartTime] = useState<string>('10:00');
-  const [endTime, setEndTime] = useState<string>('18:00');
+  const [endTime, setEndTime] = useState<string>('15:00');
   const [eventLocation, setEventLocation] = useState<string>('');
   const [eventType, setEventType] = useState<string>("Kids Birthday Party");
   const [guestsCount, setGuestsCount] = useState<number>(50);
@@ -59,9 +64,9 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
       product_id: string;
       product_name_snapshot: string;
       quantity: number;
-      unit_price: number;
+      unit_price: number; // Base price for up to 3 hours
+      additional_hourly_rate: number; // Configurable rate per additional hour after 3 hours
       discount: number;
-      total: number;
       available_quantity: number;
       category?: string;
     }>
@@ -77,6 +82,21 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
 
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Dynamic duration calculation based on start & end time
+  const durationInfo = calculateEventDuration(startTime, endTime);
+
+  // Pre-fill initial customer if supplied
+  useEffect(() => {
+    if (initialCustomer && isOpen) {
+      setSelectedCustomerId(initialCustomer.id);
+      setCustomerName(initialCustomer.name);
+      setCustomerPhone(initialCustomer.phone);
+      setCustomerWhatsapp(initialCustomer.whatsapp || initialCustomer.phone);
+      setCustomerEmail(initialCustomer.email || '');
+      setCustomerAddress(initialCustomer.address || '');
+    }
+  }, [initialCustomer, isOpen]);
 
   // Load existing customers
   useEffect(() => {
@@ -102,7 +122,6 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
                 ...item,
                 available_quantity: avail,
                 quantity: safeQty,
-                total: safeQty * item.unit_price - item.discount,
               };
             })
           );
@@ -136,13 +155,19 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
       return;
     }
 
+    const defaultHourlyRate =
+      avail.product.additional_hourly_rate !== undefined &&
+      avail.product.additional_hourly_rate !== null
+        ? avail.product.additional_hourly_rate
+        : Math.round(avail.product.unit_price * 0.2);
+
     const newItem = {
       product_id: avail.product.id,
       product_name_snapshot: avail.product.name,
       quantity: 1,
       unit_price: avail.product.unit_price,
+      additional_hourly_rate: defaultHourlyRate,
       discount: 0,
-      total: avail.product.unit_price,
       available_quantity: avail.available_quantity,
       category: avail.product.category,
     };
@@ -157,7 +182,6 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
           return {
             ...it,
             quantity: clamped,
-            total: Math.max(0, clamped * it.unit_price - it.discount),
           };
         }
         return it;
@@ -169,11 +193,23 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
     setSelectedItems((prev) =>
       prev.map((it) => {
         if (it.product_id === productId) {
-          const safePrice = Math.max(0, price);
           return {
             ...it,
-            unit_price: safePrice,
-            total: Math.max(0, it.quantity * safePrice - it.discount),
+            unit_price: Math.max(0, price),
+          };
+        }
+        return it;
+      })
+    );
+  };
+
+  const handleHourlyRateChange = (productId: string, rate: number) => {
+    setSelectedItems((prev) =>
+      prev.map((it) => {
+        if (it.product_id === productId) {
+          return {
+            ...it,
+            additional_hourly_rate: Math.max(0, rate),
           };
         }
         return it;
@@ -185,11 +221,9 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
     setSelectedItems((prev) =>
       prev.map((it) => {
         if (it.product_id === productId) {
-          const safeDisc = Math.max(0, disc);
           return {
             ...it,
-            discount: safeDisc,
-            total: Math.max(0, it.quantity * it.unit_price - safeDisc),
+            discount: Math.max(0, disc),
           };
         }
         return it;
@@ -201,8 +235,18 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
     setSelectedItems(selectedItems.filter((i) => i.product_id !== productId));
   };
 
-  // Calculations
-  const itemsSubtotal = selectedItems.reduce((acc, it) => acc + it.total, 0);
+  // Calculations dynamically based on duration
+  const itemsSubtotal = selectedItems.reduce((acc, it) => {
+    const pricing = calculateItemTotal(
+      it.unit_price,
+      it.additional_hourly_rate,
+      it.quantity,
+      durationInfo.additionalHours,
+      it.discount
+    );
+    return acc + pricing.total;
+  }, 0);
+
   const totalAmount = Math.max(
     0,
     itemsSubtotal + deliveryFee + setupFee + transportFee + otherCharges - overallDiscount
@@ -219,6 +263,11 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
     }
     if (!eventDate || !eventLocation) {
       setError('Event date and location are required.');
+      setStep(2);
+      return;
+    }
+    if (!durationInfo.isValid) {
+      setError(durationInfo.error || 'Event end time must be after start time.');
       setStep(2);
       return;
     }
@@ -255,6 +304,7 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
           product_id: it.product_id,
           quantity: it.quantity,
           unit_price: it.unit_price,
+          additional_hourly_rate: it.additional_hourly_rate,
           discount: it.discount,
           category: it.category,
         })),
@@ -487,6 +537,34 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
               </div>
             </div>
 
+            {/* Event Duration Preview in Step 2 */}
+            <div className="flex flex-wrap items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div className="flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-600 font-medium">Calculated Event Duration:</span>
+                <span
+                  className={`font-bold px-2 py-0.5 rounded-full ${
+                    durationInfo.isValid
+                      ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                      : 'bg-rose-100 text-rose-700'
+                  }`}
+                >
+                  {durationInfo.formattedDuration}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {durationInfo.isValid && durationInfo.additionalHours > 0 ? (
+                  <span className="font-semibold text-amber-700">
+                    Includes 3 hours base + {durationInfo.additionalHours} additional billable hour(s)
+                  </span>
+                ) : (
+                  <span className="font-semibold text-emerald-700">
+                    Fully within standard 3 hours base package
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -558,6 +636,78 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
         {/* Step 3: Equipment Inventory & Real-Time Availability */}
         {step === 3 && (
           <div className="p-6 space-y-6 max-h-[68vh] overflow-y-auto">
+            {/* Event Duration & Base Pricing Policy Banner */}
+            <div className="p-4.5 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start space-x-3.5">
+                  <div className="p-2.5 bg-rose-500/20 text-rose-400 rounded-xl mt-0.5 border border-rose-500/30">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                        EVENT DURATION
+                      </span>
+                      <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">
+                        {startTime} – {endTime}
+                      </span>
+                    </div>
+                    <h4 className="text-2xl font-black text-white mt-1 tracking-tight">
+                      {durationInfo.formattedDuration}
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-2.5 mt-2">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700">
+                        Included: <strong className="ml-1 text-white">3 Hours</strong>
+                      </span>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                        durationInfo.additionalHours > 0
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}>
+                        Additional: <strong className="ml-1">{durationInfo.additionalHours} Hours</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Inline Time Adjuster */}
+                <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/80 text-xs flex flex-col justify-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                    Adjust Event Timings
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <div>
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs font-semibold focus:ring-1 focus:ring-rose-500 outline-hidden"
+                      />
+                    </div>
+                    <span className="text-slate-400 text-xs font-medium">to</span>
+                    <div>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs font-semibold focus:ring-1 focus:ring-rose-500 outline-hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informational Policy Note */}
+              <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+                <p className="flex items-center space-x-1.5 text-xs text-amber-200">
+                  <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-medium">
+                    Equipment prices include up to 3 hours. Additional hourly charges apply after 3 hours.
+                  </span>
+                </p>
+              </div>
+            </div>
+
             {/* Real-time Inventory Catalog */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -572,18 +722,31 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
                   const isAvailable = item.available_quantity > 0;
                   const isLimited = item.status === 'limited';
                   const alreadySelected = selectedItems.find((s) => s.product_id === item.product.id);
+                  const basePrice = item.product.unit_price;
+                  const hourlyRate =
+                    item.product.additional_hourly_rate !== undefined &&
+                    item.product.additional_hourly_rate !== null
+                      ? item.product.additional_hourly_rate
+                      : Math.round(basePrice * 0.2);
+                  const previewTotal = calculateItemTotal(
+                    basePrice,
+                    hourlyRate,
+                    1,
+                    durationInfo.additionalHours,
+                    0
+                  );
 
                   return (
                     <div
                       key={item.product.id}
-                      className={`p-3 rounded-xl border transition flex flex-col justify-between ${
+                      className={`p-3.5 rounded-xl border transition flex flex-col justify-between ${
                         isAvailable
                           ? 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs'
                           : 'border-rose-100 bg-rose-50/40 opacity-75'
                       }`}
                     >
                       <div>
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-1.5">
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center space-x-1 ${
                               isAvailable
@@ -606,11 +769,33 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
                           {item.product.name}
                         </h4>
                         <p className="text-[11px] text-slate-500">{item.product.category}</p>
+
+                        {/* Base & Hourly Price Tags */}
+                        <div className="mt-2.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1 text-[11px]">
+                          <div className="flex justify-between text-slate-700">
+                            <span className="text-slate-500">Base (up to 3 hrs):</span>
+                            <span className="font-bold text-slate-900">{formatCurrency(basePrice)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-700">
+                            <span className="text-slate-500">Extra per hour:</span>
+                            <span className="font-semibold text-rose-600">+{formatCurrency(hourlyRate)}/hr</span>
+                          </div>
+                          {durationInfo.additionalHours > 0 && (
+                            <div className="flex justify-between font-bold pt-1 border-t border-slate-200 text-slate-900">
+                              <span className="text-slate-600">Total for {durationInfo.formattedDuration}:</span>
+                              <span className="text-rose-700 font-black">{formatCurrency(previewTotal.total)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
                         <span className="text-xs font-bold text-slate-900">
-                          {formatCurrency(item.product.unit_price)}
+                          {durationInfo.additionalHours > 0 ? (
+                            <span>{formatCurrency(previewTotal.total)} <span className="text-[10px] text-slate-500 font-normal">({durationInfo.formattedDuration})</span></span>
+                          ) : (
+                            <span>{formatCurrency(basePrice)} <span className="text-[10px] text-slate-500 font-normal">(3 hrs)</span></span>
+                          )}
                         </span>
                         <button
                           type="button"
@@ -630,82 +815,143 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
 
             {/* Selected Items Table */}
             <div>
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
-                Selected Quotation Items ({selectedItems.length})
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Selected Quotation Items ({selectedItems.length})
+                </h3>
+                {durationInfo.additionalHours > 0 && (
+                  <span className="text-xs text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                    Applying +{durationInfo.additionalHours} extra hour(s) rate
+                  </span>
+                )}
+              </div>
+
               {selectedItems.length === 0 ? (
                 <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
                   No equipment selected yet. Click &quot;Select&quot; on any available item above.
                 </div>
               ) : (
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-700">
                       <tr>
-                        <th className="p-2.5">Item</th>
-                        <th className="p-2.5 text-center">Qty</th>
-                        <th className="p-2.5 text-right">Unit Price</th>
-                        <th className="p-2.5 text-right">Discount</th>
-                        <th className="p-2.5 text-right">Total</th>
-                        <th className="p-2.5 text-center">Action</th>
+                        <th className="p-3">Equipment / Service</th>
+                        <th className="p-3 text-center">Qty</th>
+                        <th className="p-3 text-right">Base Rate (3 hrs)</th>
+                        <th className="p-3 text-right">Extra Rate (/hr)</th>
+                        <th className="p-3 text-right">Duration Breakdown</th>
+                        <th className="p-3 text-right">Discount</th>
+                        <th className="p-3 text-right font-bold">Subtotal</th>
+                        <th className="p-3 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {selectedItems.map((item) => (
-                        <tr key={item.product_id} className="hover:bg-slate-50/50">
-                          <td className="p-2.5">
-                            <p className="font-semibold text-slate-900">{item.product_name_snapshot}</p>
-                            <span className="text-[10px] text-slate-400">Max avail: {item.available_quantity}</span>
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <input
-                              type="number"
-                              min="1"
-                              max={item.available_quantity}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleQuantityChange(item.product_id, parseInt(e.target.value) || 1)
-                              }
-                              className="w-16 px-1.5 py-1 text-xs text-center border border-slate-300 rounded font-semibold focus:ring-1 focus:ring-rose-500"
-                            />
-                          </td>
-                          <td className="p-2.5 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.unit_price}
-                              onChange={(e) =>
-                                handleUnitPriceChange(item.product_id, parseFloat(e.target.value) || 0)
-                              }
-                              className="w-20 px-1.5 py-1 text-xs text-right border border-slate-300 rounded focus:ring-1 focus:ring-rose-500"
-                            />
-                          </td>
-                          <td className="p-2.5 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.discount}
-                              onChange={(e) =>
-                                handleItemDiscountChange(item.product_id, parseFloat(e.target.value) || 0)
-                              }
-                              placeholder="0"
-                              className="w-16 px-1.5 py-1 text-xs text-right border border-slate-300 rounded focus:ring-1 focus:ring-rose-500 text-rose-600"
-                            />
-                          </td>
-                          <td className="p-2.5 text-right font-bold text-slate-900">
-                            {formatCurrency(item.total)}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(item.product_id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 transition"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {selectedItems.map((item) => {
+                        const pricing = calculateSingleItemPricing({
+                          basePrice: item.unit_price,
+                          additionalHourlyCharge: item.additional_hourly_rate,
+                          quantity: item.quantity,
+                          eventDuration: durationInfo.totalHoursDecimal,
+                          discount: item.discount,
+                        });
+
+                        return (
+                          <tr key={item.product_id} className="hover:bg-slate-50/50">
+                            <td className="p-3">
+                              <p className="font-bold text-slate-900">{item.product_name_snapshot}</p>
+                              <div className="flex items-center space-x-2 text-[10px] text-slate-500 mt-0.5">
+                                {item.category && <span>{item.category}</span>}
+                                <span>•</span>
+                                <span>Max available: {item.available_quantity}</span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
+                                <span>Event Duration: <strong className="text-slate-700">{durationInfo.formattedDuration}</strong></span>
+                                <span>•</span>
+                                <span>Additional Hours: <strong className={pricing.additionalHours > 0 ? 'text-amber-700' : 'text-slate-700'}>{pricing.additionalHours}</strong></span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center">
+                              <input
+                                type="number"
+                                min="1"
+                                max={item.available_quantity}
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  handleQuantityChange(item.product_id, parseInt(e.target.value) || 1)
+                                }
+                                className="w-14 px-1.5 py-1 text-xs text-center border border-slate-300 rounded font-semibold focus:ring-1 focus:ring-rose-500"
+                              />
+                            </td>
+                            <td className="p-3 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.unit_price}
+                                onChange={(e) =>
+                                  handleUnitPriceChange(item.product_id, parseFloat(e.target.value) || 0)
+                                }
+                                title="Base price for up to 3 hours"
+                                className="w-24 px-2 py-1 text-xs text-right border border-slate-300 rounded focus:ring-1 focus:ring-rose-500 font-mono font-medium"
+                              />
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">Rs. / 3 hrs</div>
+                            </td>
+                            <td className="p-3 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.additional_hourly_rate}
+                                onChange={(e) =>
+                                  handleHourlyRateChange(item.product_id, parseFloat(e.target.value) || 0)
+                                }
+                                title="Additional hourly charge after 3 hours"
+                                className="w-20 px-2 py-1 text-xs text-right border border-slate-300 rounded focus:ring-1 focus:ring-rose-500 font-mono font-medium text-rose-700"
+                              />
+                              <div className="text-[10px] text-rose-600 mt-0.5 font-medium">Rs. / hr</div>
+                            </td>
+                            <td className="p-3 text-right">
+                              {pricing.additionalHours > 0 ? (
+                                <div className="text-[11px] space-y-0.5">
+                                  <div className="text-slate-600">
+                                    Base: {formatCurrency(pricing.baseCost)}
+                                  </div>
+                                  <div className="text-amber-700 font-semibold">
+                                    Additional: {formatCurrency(pricing.additionalCost)} ({pricing.additionalHours}h @ {formatCurrency(item.additional_hourly_rate)}/hr)
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium text-[11px] border border-emerald-200">
+                                  Included (3 hrs)
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.discount}
+                                onChange={(e) =>
+                                  handleItemDiscountChange(item.product_id, parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0"
+                                className="w-16 px-1.5 py-1 text-xs text-right border border-slate-300 rounded focus:ring-1 focus:ring-rose-500 text-rose-600 font-mono"
+                              />
+                            </td>
+                            <td className="p-3 text-right font-bold text-slate-900 font-mono text-sm">
+                              {formatCurrency(pricing.finalItemTotal)}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(item.product_id)}
+                                title="Remove item"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

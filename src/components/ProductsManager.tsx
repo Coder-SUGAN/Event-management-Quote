@@ -18,6 +18,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
   const [category, setCategory] = useState<string>('Bouncy Castles');
   const [totalQuantity, setTotalQuantity] = useState<number>(1);
   const [unitPrice, setUnitPrice] = useState<number>(15000);
+  const [additionalHourlyRate, setAdditionalHourlyRate] = useState<number>(3000);
   const [description, setDescription] = useState<string>('');
   const [dimensions, setDimensions] = useState<string>('');
   const [powerRequired, setPowerRequired] = useState<string>('');
@@ -31,6 +32,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
     setCategory('Bouncy Castles');
     setTotalQuantity(1);
     setUnitPrice(15000);
+    setAdditionalHourlyRate(3000);
     setDescription('');
     setDimensions('');
     setPowerRequired('');
@@ -45,6 +47,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
     setCategory(p.category);
     setTotalQuantity(p.total_quantity);
     setUnitPrice(p.unit_price);
+    setAdditionalHourlyRate(p.additional_hourly_rate ?? Math.round(p.unit_price * 0.2));
     setDescription(p.description || '');
     setDimensions(p.dimensions || '');
     setPowerRequired(p.power_required || '');
@@ -67,6 +70,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
           category,
           total_quantity: totalQuantity,
           unit_price: unitPrice,
+          additional_hourly_rate: additionalHourlyRate,
           description,
           dimensions,
           power_required: powerRequired,
@@ -78,6 +82,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
           category,
           total_quantity: totalQuantity,
           unit_price: unitPrice,
+          additional_hourly_rate: additionalHourlyRate,
           description,
           dimensions,
           power_required: powerRequired,
@@ -138,8 +143,9 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Equipment Name</th>
                 <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4 text-center">Total Inventory</th>
-                <th className="py-3 px-4 text-right">Standard Daily Rate</th>
+                <th className="py-3 px-4 text-center">Total Units</th>
+                <th className="py-3 px-4 text-right">Base Price (Up to 3 Hours)</th>
+                <th className="py-3 px-4 text-right">Additional 1 Hour Charge</th>
                 <th className="py-3 px-4">Dimensions & Power</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Action</th>
@@ -160,8 +166,17 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                       {p.total_quantity}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right font-black text-slate-900">
-                    {formatCurrency(p.unit_price)}
+                  <td className="py-3.5 px-4 text-right">
+                    <span className="font-black text-slate-900 block">
+                      {formatCurrency(p.unit_price)}
+                    </span>
+                    <span className="text-[10px] text-slate-400">up to 3 hours</span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <span className="font-bold text-rose-600 block">
+                      +{formatCurrency(p.additional_hourly_rate || 0)}
+                    </span>
+                    <span className="text-[10px] text-slate-400">per extra hour</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-600 text-[11px]">
                     <p>{p.dimensions || '—'}</p>
@@ -263,10 +278,17 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                 </div>
               </div>
 
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900">
+                <p className="font-bold">⏱️ 3-Hour Duration Pricing Policy</p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  Base prices cover up to 3 hours. Additional hours beyond 3 hours are billed per extra hour.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Daily Rental Rate (LKR) *
+                    Base Price (Up to 3 Hours) (LKR) *
                   </label>
                   <input
                     type="number"
@@ -277,8 +299,31 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     required
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden font-semibold"
                   />
+                  <span className="text-[10px] text-slate-500 block mt-1">
+                    Base rental price includes up to 3 hours.
+                  </span>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Additional 1 Hour Charge (LKR) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={additionalHourlyRate}
+                    onChange={(e) => setAdditionalHourlyRate(Number(e.target.value))}
+                    required
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden font-semibold text-rose-600"
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-1">
+                    Additional charge applied for each hour beyond 3 hours.
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <select
@@ -290,9 +335,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     <option value="maintenance">Under Maintenance</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Dimensions (LxWxH)
@@ -305,19 +348,19 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Power Required
-                  </label>
-                  <input
-                    type="text"
-                    value={powerRequired}
-                    onChange={(e) => setPowerRequired(e.target.value)}
-                    placeholder="e.g. 1.5HP Blower (230V)"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Power Required
+                </label>
+                <input
+                  type="text"
+                  value={powerRequired}
+                  onChange={(e) => setPowerRequired(e.target.value)}
+                  placeholder="e.g. 1.5HP Blower (230V)"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden"
+                />
               </div>
 
               <div>

@@ -5,6 +5,7 @@ import {
   Filter,
   Send,
   Printer,
+  Download,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -169,7 +170,17 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
 
                       <td className="py-3.5 px-4">
                         <span className="font-semibold text-slate-800 block">{quote.event_date}</span>
-                        <span className="text-[11px] text-slate-500 line-clamp-1">
+                        <div className="flex items-center space-x-1 mt-0.5">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                            {quote.event_duration_formatted || `${quote.event_start_time}–${quote.event_end_time}`}
+                          </span>
+                          {(quote.additional_hours || 0) > 0 && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                              +{quote.additional_hours}h extra
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                           {quote.event_location}
                         </span>
                       </td>
@@ -208,10 +219,19 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
                           {/* View Preview Button */}
                           <button
                             onClick={() => onPreview(quote)}
-                            title="Preview / Print Document"
+                            title="Preview Quotation"
                             className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+
+                          {/* Download PDF Button */}
+                          <button
+                            onClick={() => onPreview(quote)}
+                            title="Download Quotation PDF"
+                            className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                          >
+                            <Download className="w-4 h-4" />
                           </button>
 
                           {/* WhatsApp Button */}
