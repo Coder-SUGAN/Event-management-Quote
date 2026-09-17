@@ -370,7 +370,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       {/* Equipment */}
                       <td className="py-3.5 px-4 max-w-[200px]">
                         <div className="space-y-0.5">
-                          {b.items.slice(0, 3).map((it, idx) => (
+                          {(b.items || []).slice(0, 3).map((it, idx) => (
                             <span
                               key={idx}
                               className={`block text-[11px] font-medium truncate ${
@@ -380,9 +380,9 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                               • {it.quantity}x {it.product_name_snapshot}
                             </span>
                           ))}
-                          {b.items.length > 3 && (
+                          {(b.items || []).length > 3 && (
                             <span className="text-[10px] text-slate-400">
-                              +{b.items.length - 3} more item(s)
+                              +{(b.items || []).length - 3} more item(s)
                             </span>
                           )}
                         </div>
@@ -706,11 +706,11 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Reserved Inflatables & Equipment ({b.items.length})
+                      Reserved Inflatables & Equipment ({(b.items || []).length})
                     </span>
                   </div>
                   <div className="divide-y divide-slate-100">
-                    {b.items.map((item, idx) => (
+                    {(b.items || []).map((item, idx) => (
                       <div key={idx} className="p-3.5 flex items-center justify-between text-xs">
                         <div className="flex items-center space-x-3">
                           <span className="w-6 h-6 rounded-lg bg-rose-50 text-rose-600 font-bold flex items-center justify-center text-[11px]">

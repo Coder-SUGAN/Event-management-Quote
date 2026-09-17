@@ -675,7 +675,7 @@ export const CustomersManager: React.FC<CustomersManagerProps> = ({
                                 </td>
                                 <td className="py-3.5 px-4">
                                   <div className="text-[11px] text-slate-600 truncate max-w-[160px]">
-                                    {b.items.map((i) => `${i.quantity}x ${i.product_name_snapshot}`).join(', ')}
+                                    {(b.items || []).map((i) => `${i.quantity}x ${i.product_name_snapshot}`).join(', ')}
                                   </div>
                                 </td>
                                 <td className="py-3.5 px-4 text-right font-bold text-slate-900">
@@ -758,7 +758,7 @@ export const CustomersManager: React.FC<CustomersManagerProps> = ({
                                 <td className="py-3.5 px-4 font-bold text-slate-900">{q.quotation_number}</td>
                                 <td className="py-3.5 px-4 text-slate-700">{q.event_date}</td>
                                 <td className="py-3.5 px-4 text-slate-600">{q.event_location}</td>
-                                <td className="py-3.5 px-4 text-right font-bold text-slate-900">{formatCurrency(q.total)}</td>
+                                <td className="py-3.5 px-4 text-right font-bold text-slate-900">{formatCurrency(q.total_amount || (q as any).total)}</td>
                                 <td className="py-3.5 px-4 text-center">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                     q.status === 'Accepted' || q.status === 'Converted to Booking'

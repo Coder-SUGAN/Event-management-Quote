@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Menu,
   Search,
@@ -9,6 +9,11 @@ import {
   Calendar,
   X,
   ArrowUpRight,
+  LogIn,
+  LogOut,
+  User,
+  ShieldCheck,
+  Database,
 } from 'lucide-react';
 
 import type {
@@ -36,6 +41,12 @@ import {
   searchAll,
 } from './lib/api.ts';
 
+import { useAuth } from './lib/authContext.tsx';
+import { AuthModal } from './components/AuthModal.tsx';
+import { SupabaseSchemaModal } from './components/SupabaseSchemaModal.tsx';
+import { getMissingTables } from './lib/supabase.ts';
+import { exportScheduleToExcel } from './lib/excelExport.ts';
+
 import { Sidebar } from './components/Sidebar.tsx';
 import { Dashboard } from './components/Dashboard.tsx';
 import { QuotationsList } from './components/QuotationsList.tsx';
@@ -62,9 +73,32 @@ const DEFAULT_STATS: DashboardStats = {
   monthly_revenue_amount: 0,
 };
 
+// Route mapper for direct URL navigation
+function getTabFromPathname(path: string): { tab: string; openAuth?: 'login' | 'signup' } {
+  const clean = path.toLowerCase().replace(/^\/+|\/+$/g, '');
+  if (clean === 'login') return { tab: 'dashboard', openAuth: 'login' };
+  if (clean === 'signup') return { tab: 'dashboard', openAuth: 'signup' };
+  if (clean === 'quotation' || clean === 'quotations') return { tab: 'quotations' };
+  if (clean === 'inventory' || clean === 'products') return { tab: 'products' };
+  if (clean === 'customers') return { tab: 'customers' };
+  if (clean === 'bookings') return { tab: 'bookings' };
+  if (clean === 'invoice' || clean === 'invoices') return { tab: 'invoices' };
+  if (clean === 'event-schedule' || clean === 'schedule') return { tab: 'schedule' };
+  if (clean === 'availability') return { tab: 'availability' };
+  if (clean === 'payments') return { tab: 'payments' };
+  if (clean === 'templates' || clean === 'settings') return { tab: 'templates' };
+  return { tab: 'dashboard' };
+}
+
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const initialRoute = getTabFromPathname(window.location.pathname);
+  const [currentTab, setCurrentTab] = useState<string>(initialRoute.tab);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
+  // Auth State
+  const { user, signOut, isConfigured: isSupabaseConfigured } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(!!initialRoute.openAuth);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>((initialRoute.openAuth as 'login' | 'signup') || 'login');
 
   // Core entities state
   const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
@@ -107,11 +141,36 @@ export default function App() {
 
   // Toast banner
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState<boolean>(false);
+  const [missingTableCount, setMissingTableCount] = useState<number>(0);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
   };
+
+  // Synchronize Tab and URL
+  const navigateToTab = useCallback((tabId: string) => {
+    setCurrentTab(tabId);
+    const targetPath = tabId === 'dashboard' ? '/' : `/${tabId}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+  }, []);
+
+  // Listen for browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getTabFromPathname(window.location.pathname);
+      setCurrentTab(route.tab);
+      if (route.openAuth) {
+        setAuthMode(route.openAuth);
+        setIsAuthModalOpen(true);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const loadAllData = async () => {
     try {
@@ -137,15 +196,16 @@ export default function App() {
         fetchTemplateSettings().catch(() => null),
       ]);
 
-      setStats(statsData);
-      setQuotations(quotesData);
-      setBookings(bookingsData);
-      setInvoices(invoicesData);
-      setPayments(paymentsData);
-      setProducts(productsData);
-      setCustomers(customersData);
-      setDailySchedule(scheduleData);
+      setStats(statsData || DEFAULT_STATS);
+      setQuotations(Array.isArray(quotesData) ? quotesData : []);
+      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
+      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setProducts(Array.isArray(productsData) ? productsData : []);
+      setCustomers(Array.isArray(customersData) ? customersData : []);
+      setDailySchedule(Array.isArray(scheduleData) ? scheduleData : []);
       if (templatesData) setTemplateSettings(templatesData);
+      setMissingTableCount(getMissingTables().length);
     } catch (err) {
       console.error('Failed to load application data:', err);
     }
@@ -185,8 +245,13 @@ export default function App() {
     });
   };
 
-  const handleOpenInvoicePreview = (invoiceNumber: string) => {
-    const inv = invoices.find((i) => i.invoice_number === invoiceNumber);
+  const handleOpenInvoicePreview = (invoiceOrNumber: Invoice | string) => {
+    let inv: Invoice | undefined;
+    if (typeof invoiceOrNumber === 'string') {
+      inv = invoices.find((i) => i.invoice_number === invoiceOrNumber || i.id === invoiceOrNumber);
+    } else {
+      inv = invoiceOrNumber;
+    }
     if (inv) {
       setPreviewModal({
         isOpen: true,
@@ -226,7 +291,7 @@ export default function App() {
       <Sidebar
         currentTab={currentTab}
         onSelectTab={(tab) => {
-          setCurrentTab(tab);
+          navigateToTab(tab);
           setSearchQuery('');
           setSearchResults(null);
         }}
@@ -422,20 +487,66 @@ export default function App() {
           </div>
 
           {/* Quick Header CTAs */}
-          <div className="flex items-center space-x-3">
-            <a
-              href="/api/schedule/export-excel"
-              target="_blank"
-              rel="noreferrer"
-              className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition"
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <button
+              onClick={() => exportScheduleToExcel(dailySchedule)}
+              className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+              title="Download full schedule as Excel spreadsheet"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Export Excel</span>
-            </a>
+            </button>
+
+            {missingTableCount > 0 && (
+              <button
+                onClick={() => setIsSchemaModalOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-semibold transition cursor-pointer"
+                title="Tables missing in Supabase schema. Click to view & copy SQL setup script"
+              >
+                <Database className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">DB Setup ({missingTableCount})</span>
+                <span className="sm:hidden">DB ({missingTableCount})</span>
+              </button>
+            )}
+
+            {/* Supabase Auth Staff Badge / Login Trigger */}
+            {user ? (
+              <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
+                <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs uppercase" title={user.email || 'Staff'}>
+                  {(user.email || 'S')[0]}
+                </div>
+                <div className="hidden md:block text-left">
+                  <span className="block text-[11px] font-bold text-slate-800 truncate max-w-[100px]">
+                    {user.user_metadata?.full_name || user.email?.split('@')[0]}
+                  </span>
+                  <span className="block text-[9px] text-emerald-600 font-semibold uppercase tracking-wider">
+                    Staff Active
+                  </span>
+                </div>
+                <button
+                  onClick={() => signOut()}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setIsAuthModalOpen(true);
+                }}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+              >
+                <LogIn className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Staff Login</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsQuotationModalOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">New Quotation</span>
@@ -475,7 +586,7 @@ export default function App() {
               }}
               onPreview={handleOpenQuotationPreview}
               onConfirmBooking={handleConfirmBookingFromQuote}
-              onViewBooking={() => setCurrentTab('bookings')}
+              onViewBooking={() => navigateToTab('bookings')}
               onViewInvoice={handleOpenInvoicePreview}
               onRefresh={loadAllData}
             />
@@ -503,18 +614,15 @@ export default function App() {
           {currentTab === 'schedule' && (
             <DailyEquipmentView
               onSelectBooking={(bNum) => {
-                setCurrentTab('bookings');
+                navigateToTab('bookings');
               }}
             />
           )}
 
           {currentTab === 'invoices' && (
-            <BookingsList
-              bookings={bookings}
+            <InvoicesList
               invoices={invoices}
-              onRecordPayment={handleRecordPaymentForBooking}
-              onViewInvoice={handleOpenInvoicePreview}
-              onRefresh={loadAllData}
+              onPreviewInvoice={handleOpenInvoicePreview}
             />
           )}
 
@@ -590,6 +698,19 @@ export default function App() {
           showToast(msg || 'Payment recorded successfully. Booking confirmed.');
           loadAllData();
         }}
+      />
+
+      {/* Supabase Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authMode}
+      />
+
+      {/* Supabase Schema Setup Modal */}
+      <SupabaseSchemaModal
+        isOpen={isSchemaModalOpen}
+        onClose={() => setIsSchemaModalOpen(false)}
       />
     </div>
   );

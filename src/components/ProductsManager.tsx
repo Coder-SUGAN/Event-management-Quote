@@ -25,6 +25,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
   const [status, setStatus] = useState<'active' | 'maintenance'>('active');
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const openAddModal = () => {
@@ -116,13 +117,28 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
 
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
+        setSuccessMessage(`Equipment "${cleanName}" updated successfully`);
       } else {
         await createProduct(payload);
+        setSuccessMessage('Equipment added successfully');
       }
       setIsModalOpen(false);
+      setName('');
+      setDescription('');
+      setDimensions('');
+      setPowerRequired('');
+      setSearchTerm('');
       onRefresh();
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save equipment item. Please try again.');
+      console.error('Inventory operation error:', err);
+      setError(
+        editingProduct
+          ? `Could not update equipment: ${err?.message || 'Unknown error'}`
+          : `Could not add equipment: ${err?.message || 'Unknown error'}`
+      );
     } finally {
       setSaving(false);
     }
@@ -136,6 +152,22 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center justify-between shadow-xs transition-all">
+          <div className="flex items-center space-x-2.5 font-bold">
+            <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-500 hover:text-emerald-700 p-1 rounded-lg hover:bg-emerald-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">

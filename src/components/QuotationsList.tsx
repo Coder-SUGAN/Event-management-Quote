@@ -297,7 +297,7 @@ export const QuotationsList: React.FC<QuotationsListProps> = ({
 
                       <td className="py-3.5 px-4">
                         <div className="space-y-0.5">
-                          {quote.items.map((it, idx) => (
+                          {(quote.items || []).map((it, idx) => (
                             <span key={idx} className="block text-[11px] text-slate-700">
                               • {it.quantity}x {it.product_name_snapshot}
                             </span>

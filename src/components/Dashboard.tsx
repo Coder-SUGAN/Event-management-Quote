@@ -82,7 +82,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Equipment currently booked (aggregate from upcoming bookings)
   const bookedEquipmentCount = upcomingBookings.reduce((sum, b) => {
-    return sum + b.items.reduce((iSum, item) => iSum + item.quantity, 0);
+    const bItems = Array.isArray(b.items) ? b.items : [];
+    return sum + bItems.reduce((iSum, item) => iSum + (item?.quantity || 0), 0);
   }, 0);
 
   // Equipment requiring attention (maintenance or low availability)
@@ -311,7 +312,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
                     <div className="text-[11px] text-slate-500">
-                      {evt.items.length} equipment unit(s)
+                      {(evt.items || []).length} equipment unit(s)
                     </div>
                     <div className="text-right">
                       {evt.balance > 0 ? (
@@ -432,12 +433,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <span className="font-medium text-slate-700">{q.customer_name}</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      📅 For: {q.event_date} • {q.items.length} item(s)
+                      📅 For: {q.event_date} • {(q.items || []).length} item(s)
                     </p>
                   </div>
                   <div className="text-right">
                     <span className="font-bold text-xs text-slate-900 block">
-                      {formatCurrency(q.total)}
+                      {formatCurrency(q.total_amount || (q as any).total)}
                     </span>
                     <button
                       onClick={() => onPreviewQuotation(q)}
