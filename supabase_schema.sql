@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS products (
     category VARCHAR(100) NOT NULL,
     total_quantity INT NOT NULL DEFAULT 1 CHECK (total_quantity >= 0),
     unit_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    additional_hourly_rate NUMERIC(12, 2) DEFAULT 0.00,
     description TEXT,
     dimensions VARCHAR(100),
     power_required VARCHAR(100),
@@ -43,6 +44,11 @@ CREATE TABLE IF NOT EXISTS products (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure optional columns exist for existing tables
+ALTER TABLE products ADD COLUMN IF NOT EXISTS additional_hourly_rate NUMERIC(12, 2) DEFAULT 0.00;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS dimensions VARCHAR(100);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS power_required VARCHAR(100);
 
 -- 4. QUOTATIONS TABLE
 CREATE TABLE IF NOT EXISTS quotations (
