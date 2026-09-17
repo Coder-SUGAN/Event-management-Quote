@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { DashboardStats, Booking, Quotation, DailyScheduleEntry, Payment, Product } from '../types.ts';
 import { formatCurrency, generateWhatsAppUrl } from '../lib/api.ts';
+import { generateQuotationName } from '../lib/pricing.ts';
 
 interface DashboardProps {
   stats: DashboardStats;
@@ -416,13 +417,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 >
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="font-mono text-xs font-bold text-slate-900">{q.quotation_number}</span>
+                      <span className="font-bold text-xs text-slate-900">
+                        {q.quote_name || generateQuotationName(q.event_date, q.customer_name)}
+                      </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
                         {q.status}
                       </span>
                     </div>
-                    <p className="text-xs font-semibold text-slate-800 mt-1">{q.customer_name}</p>
-                    <p className="text-[11px] text-slate-500">
+                    <div className="flex items-center space-x-2 text-[11px] text-slate-500 mt-0.5">
+                      <span className="font-mono text-slate-600 font-medium">
+                        {q.quote_number || q.quotation_number}
+                      </span>
+                      <span>•</span>
+                      <span className="font-medium text-slate-700">{q.customer_name}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
                       📅 For: {q.event_date} • {q.items.length} item(s)
                     </p>
                   </div>

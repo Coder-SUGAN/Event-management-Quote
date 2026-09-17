@@ -35,6 +35,7 @@ import {
   markBookingCompleted,
   generateInvoiceForBooking,
 } from '../lib/api.ts';
+import { triggerFileDownload } from '../lib/pdfGenerator.ts';
 
 interface BookingsListProps {
   bookings: Booking[];
@@ -95,15 +96,33 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
       case 'Confirmed':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'Upcoming':
       case 'In Progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Completed':
         return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Pending Payment':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
       case 'Cancelled':
         return 'bg-rose-100 text-rose-800 border-rose-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
+    }
+  };
+
+  const getPaymentBadge = (status: string) => {
+    switch (status) {
+      case 'Fully Paid':
+      case 'Paid':
+        return 'bg-emerald-50 text-emerald-800 border-emerald-300';
+      case 'Deposit Paid':
+        return 'bg-amber-50 text-amber-800 border-amber-300';
+      case 'Partially Paid':
+        return 'bg-orange-50 text-orange-800 border-orange-300';
+      case 'Unpaid':
+      default:
+        return 'bg-rose-50 text-rose-800 border-rose-300';
     }
   };
 
@@ -398,14 +417,19 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                           {b.status}
                         </span>
                         <span
-                          className={`block text-[10px] font-semibold mt-1 ${
-                            b.payment_status === 'Paid'
-                              ? 'text-emerald-600'
-                              : b.payment_status === 'Partially Paid'
-                              ? 'text-amber-600'
-                              : 'text-rose-600'
-                          }`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1 border ${getPaymentBadge(
+                            b.payment_status
+                          )}`}
                         >
+                          <span className="mr-1 text-[8px]">
+                            {b.payment_status === 'Fully Paid' || b.payment_status === 'Paid'
+                              ? '🟢'
+                              : b.payment_status === 'Deposit Paid'
+                              ? '🟡'
+                              : b.payment_status === 'Partially Paid'
+                              ? '🟠'
+                              : '🔴'}
+                          </span>
                           {b.payment_status}
                         </span>
                       </td>
@@ -594,9 +618,9 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                             <span>View / Print Invoice</span>
                           </button>
                           <button
-                            onClick={() => onViewInvoice(b.invoice_number!)}
+                            onClick={() => triggerFileDownload(`/api/pdf/invoice/${encodeURIComponent(b.invoice_number!)}`, `${b.invoice_number}.pdf`)}
                             className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
-                            title="Download Invoice PDF"
+                            title="Download Invoice PDF to Computer"
                           >
                             <Download className="w-3.5 h-3.5" />
                             <span>Download</span>

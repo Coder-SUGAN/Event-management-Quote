@@ -4,30 +4,46 @@ export type QuotationStatus =
   | 'Customer Reviewing'
   | 'Changes Requested'
   | 'Revised'
+  | 'Pending Payment'
+  | 'Confirmed'
   | 'Accepted' 
   | 'Rejected' 
   | 'Expired' 
+  | 'Cancelled'
   | 'Awaiting Payment' 
   | 'Paid' 
   | 'Converted to Booking';
 
 export type BookingStatus = 
+  | 'Draft'
+  | 'Sent'
+  | 'Pending Payment'
   | 'Confirmed' 
   | 'Upcoming' 
   | 'In Progress' 
   | 'Completed' 
   | 'Cancelled';
 
+export type PaymentType =
+  | 'Deposit'
+  | 'Partial Payment'
+  | 'Full Payment'
+  | 'Balance Payment'
+  | 'Refund';
+
 export type PaymentMethod = 
+  | 'Cash'
   | 'Bank Transfer' 
-  | 'Cash' 
+  | 'Card'
   | 'Online Payment' 
   | 'Other';
 
 export type PaymentStatus = 
   | 'Unpaid' 
+  | 'Deposit Paid'
   | 'Partially Paid' 
-  | 'Paid' 
+  | 'Fully Paid' 
+  | 'Paid'
   | 'Refunded';
 
 export interface Customer {
@@ -108,12 +124,17 @@ export interface QuotationVersion {
   notes?: string;
   terms_and_conditions?: string;
   status: QuotationStatus;
+  quote_number?: string;
+  quote_name?: string;
 }
 
 export interface Quotation {
   id: string;
   quotation_number: string;
-  version: number;
+  quote_number?: string;
+  quote_name?: string;
+  quotation_name?: string;
+  version?: number;
   version_history?: QuotationVersion[];
   customer_id: string;
   customer_name: string;
@@ -144,6 +165,9 @@ export interface Quotation {
   total_amount: number;
   deposit_required: number;
   remaining_balance: number;
+  amount_paid?: number;
+  total_paid?: number;
+  payment_status?: PaymentStatus;
   status: QuotationStatus;
   valid_until: string;
   created_at: string;
@@ -187,7 +211,10 @@ export interface Booking {
   amount_paid: number;
   balance: number;
   status: BookingStatus;
+  booking_status?: BookingStatus;
   payment_status: PaymentStatus;
+  confirmed_at?: string;
+  confirmed_by?: string;
   invoice_number?: string;
   created_at: string;
   updated_at: string;
@@ -198,15 +225,22 @@ export interface Payment {
   booking_id: string;
   booking_number: string;
   quotation_id?: string;
+  customer_id?: string;
+  customer_name?: string;
   amount: number;
-  payment_date: string;
+  payment_type?: PaymentType;
   payment_method: PaymentMethod;
+  payment_date: string;
   transaction_reference: string;
+  reference_number?: string;
   payment_notes: string;
+  notes?: string;
   payment_proof_name?: string;
   payment_proof_data?: string;
+  payment_proof_url?: string;
   payment_status: PaymentStatus;
   created_at: string;
+  created_by?: string;
 }
 
 export interface Invoice {

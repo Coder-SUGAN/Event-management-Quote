@@ -255,7 +255,7 @@ export default function App() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Global search (customer name, phone, quotation #, booking #, item)..."
+                placeholder="Global search (quotation name, quote #, customer, phone, booking #)..."
                 className="w-full pl-9 pr-8 py-2 text-xs bg-slate-100 hover:bg-slate-50 focus:bg-white border border-transparent focus:border-rose-400 rounded-xl focus:ring-2 focus:ring-rose-500/20 outline-hidden transition"
               />
               {searchQuery && (
@@ -300,8 +300,16 @@ export default function App() {
                             className="p-2 hover:bg-slate-50 rounded-lg text-xs flex justify-between items-center cursor-pointer"
                           >
                             <div>
-                              <span className="font-mono font-bold text-slate-900">{q.quotation_number}</span>
-                              <span className="text-slate-600 ml-2">{q.customer_name}</span>
+                              <span className="font-bold text-slate-900 block">
+                                {q.quote_name || `${q.event_date} - ${q.customer_name}`}
+                              </span>
+                              <div className="flex items-center space-x-1.5 text-[11px] text-slate-500 mt-0.5">
+                                <span className="font-mono text-slate-700 font-medium">
+                                  {q.quote_number || q.quotation_number}
+                                </span>
+                                <span>•</span>
+                                <span>{q.customer_name}</span>
+                              </div>
                             </div>
                             <span className="font-semibold text-slate-700">{q.event_date}</span>
                           </div>
@@ -458,12 +466,17 @@ export default function App() {
           {currentTab === 'quotations' && (
             <QuotationsList
               quotations={quotations}
+              bookings={bookings}
+              invoices={invoices}
+              payments={payments}
               onOpenBuilder={() => {
                 setSelectedCustomerForQuote(null);
                 setIsQuotationModalOpen(true);
               }}
               onPreview={handleOpenQuotationPreview}
               onConfirmBooking={handleConfirmBookingFromQuote}
+              onViewBooking={() => setCurrentTab('bookings')}
+              onViewInvoice={handleOpenInvoicePreview}
               onRefresh={loadAllData}
             />
           )}
@@ -572,8 +585,9 @@ export default function App() {
         onClose={() => setPaymentModal({ isOpen: false, quotation: null, booking: null })}
         quotation={paymentModal.quotation}
         booking={paymentModal.booking}
-        onSuccess={() => {
-          showToast('Payment recorded and booking confirmed! Daily schedule updated.');
+        payments={payments}
+        onSuccess={(msg) => {
+          showToast(msg || 'Payment recorded successfully. Booking confirmed.');
           loadAllData();
         }}
       />

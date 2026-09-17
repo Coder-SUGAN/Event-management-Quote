@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
-import type { Quotation, Invoice, CompanyTemplateSettings } from '../types.ts';
+import type { Quotation, Invoice, CompanyTemplateSettings } from '../src/types.ts';
 
 function hexToRgb(hex?: string): [number, number, number] {
-  if (!hex) return [225, 29, 72];
+  if (!hex) return [225, 29, 72]; // default rose-600
   const clean = hex.replace('#', '');
   if (clean.length === 3) {
     return [
@@ -26,120 +26,29 @@ function formatRs(amount?: number): string {
   return `Rs. ${val.toLocaleString('en-US')}`;
 }
 
-/**
- * Universal browser file downloader:
- * Ensures the generated PDF is saved directly to the user's computer
- */
-export function triggerFileDownload(blobOrUrl: Blob | string, filename: string): void {
-  const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-
-  if (typeof blobOrUrl === 'string') {
-    // URL string (e.g. server endpoint)
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = blobOrUrl;
-    a.download = safeFilename;
-    a.setAttribute('download', safeFilename);
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      if (document.body.contains(a)) {
-        document.body.removeChild(a);
-      }
-    }, 1000);
-    return;
-  }
-
-  // Blob object
-  const blobUrl = URL.createObjectURL(blobOrUrl);
-  const a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = blobUrl;
-  a.download = safeFilename;
-  a.setAttribute('download', safeFilename);
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-
-  setTimeout(() => {
-    if (document.body.contains(a)) {
-      document.body.removeChild(a);
-    }
-    URL.revokeObjectURL(blobUrl);
-  }, 2500);
-}
-
-/**
- * Downloads quotation PDF directly to the user's computer
- */
-export async function downloadQuotationPdf(
+export function generateQuotationPdfBuffer(
   quote: Quotation,
-  settings?: CompanyTemplateSettings,
-  customFilename?: string
-): Promise<void> {
-  const defaultSettings: CompanyTemplateSettings = {
-    company_name: 'Kids Jump 4 Joy',
-    tagline: 'Bouncy Castles & Party Equipment Rentals',
-    logo_url: '',
-    address: '12 Temple Road, Kurunegala, Sri Lanka',
-    phone: '+94 77 123 4567',
-    whatsapp: '+94 77 123 4567',
-    email: 'info@kidsjump4joy.lk',
-    reg_number: 'PV-123456',
-    primary_color: '#e11d48',
-    secondary_color: '#f43f5e',
-    quotation_header: 'EVENT QUOTATION',
-    invoice_header: 'TAX INVOICE',
-    quotation_terms: '1. 50% non-refundable advance deposit required to confirm event booking.\n2. Continuous power supply (230V) must be available within 20m of setup area.\n3. Flat grass or smooth surface free of sharp objects required.',
-    invoice_terms: '1. Official payment receipt issued upon balance clearance.\n2. Inquiries regarding this invoice should quote the invoice number.\n3. Kids Jump 4 Joy is committed to safe and memorable celebrations.',
-    payment_instructions: 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch',
-    quotation_footer: 'Thank you for choosing Kids Jump 4 Joy! We look forward to making your celebration unforgettable.',
-    invoice_footer: 'Thank you for your business! Kids Jump 4 Joy brings endless joy to every celebration.',
-  };
-
-  const st = settings || defaultSettings;
-  const quoteNumber = quote.quote_number || quote.quotation_number || 'Quotation';
-  const filename = customFilename || `${quoteNumber}.pdf`;
-
-  // First try server endpoint which provides HTTP attachment header
-  const quoteIdOrNum = quote.id || quote.quotation_number || quote.quote_number;
-  if (quoteIdOrNum) {
-    try {
-      const serverUrl = `/api/pdf/quotation/${encodeURIComponent(quoteIdOrNum)}`;
-      const res = await fetch(serverUrl);
-      if (res.ok) {
-        const blob = await res.blob();
-        triggerFileDownload(blob, filename);
-        return;
-      }
-    } catch (e) {
-      console.warn('Server PDF endpoint fetch failed, generating client-side vector PDF:', e);
-    }
-  }
-
-  // Fallback: Generate pristine client-side vector PDF using jsPDF
+  settings: CompanyTemplateSettings
+): Buffer {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
   });
 
-  const primaryColor = hexToRgb(st.primary_color);
+  const primaryColor = hexToRgb(settings.primary_color);
   const pageWidth = 210;
   const pageHeight = 297;
   const margin = 14;
-  const contentWidth = pageWidth - margin * 2;
+  const contentWidth = pageWidth - margin * 2; // 182mm
 
-  // Header banner
+  // Top color accent band
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, pageWidth, 5, 'F');
 
   let y = 14;
 
-  // Logo & Company Name
+  // Company logo / initials icon
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.roundedRect(margin, y, 10, 10, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
@@ -147,47 +56,50 @@ export async function downloadQuotationPdf(
   doc.setFontSize(10);
   doc.text('KJ', margin + 2.5, y + 6.8);
 
-  doc.setTextColor(15, 23, 42);
+  // Company details
+  doc.setTextColor(15, 23, 42); // slate-900
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text(st.company_name, margin + 13, y + 5);
+  doc.text(settings.company_name || 'Kids Jump 4 Joy', margin + 13, y + 5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(st.tagline, margin + 13, y + 9);
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text(settings.tagline || 'Bouncy Castles & Party Equipment Rentals', margin + 13, y + 9);
 
-  // Document title
+  // Right-aligned Document Title & Metadata
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text(st.quotation_header, pageWidth - margin, y + 4, { align: 'right' });
+  doc.text(settings.quotation_header || 'EVENT QUOTATION', pageWidth - margin, y + 4, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
+  const quoteNumber = quote.quote_number || quote.quotation_number || 'QUOTATION';
   doc.text(`Ref: ${quoteNumber}`, pageWidth - margin, y + 9, { align: 'right' });
 
   y += 14;
 
-  // Contacts
+  // Company contacts (small block)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`${st.address}  |  Hotline/WhatsApp: ${st.phone}`, margin, y);
+  doc.text(`${settings.address || 'Kurunegala, Sri Lanka'}  |  Hotline/WhatsApp: ${settings.phone || '+94 77 123 4567'}`, margin, y);
   y += 3.5;
-  doc.text(`Email: ${st.email}${st.reg_number ? `  |  Reg: ${st.reg_number}` : ''}`, margin, y);
+  doc.text(`Email: ${settings.email || 'info@kidsjump4joy.lk'}${settings.reg_number ? `  |  Reg: ${settings.reg_number}` : ''}`, margin, y);
 
+  // Right-side Date info
   const quoteDate = quote.created_at ? quote.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
   doc.text(`Issued Date: ${quoteDate}   |   Valid Until: ${quote.valid_until || '7 Days'}`, pageWidth - margin, y, { align: 'right' });
 
   y += 5;
-  doc.setDrawColor(226, 232, 240);
+  doc.setDrawColor(226, 232, 240); // slate-200
   doc.setLineWidth(0.4);
   doc.line(margin, y, pageWidth - margin, y);
   y += 4;
 
-  // Quotation Name Banner
+  // Quotation Name Banner if present
   const quoteName = quote.quote_name || `${quote.event_date} - ${quote.customer_name}`;
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F');
@@ -199,7 +111,7 @@ export async function downloadQuotationPdf(
   doc.text(quoteName, margin + 28, y + 4.8);
   y += 10;
 
-  // Customer & Event Cards
+  // Customer & Event Info Boxes (2 column card)
   const boxWidth = (contentWidth - 4) / 2;
   const boxHeight = 30;
 
@@ -268,18 +180,18 @@ export async function downloadQuotationPdf(
   y += boxHeight + 4;
 
   // Pricing policy badge
-  doc.setFillColor(254, 243, 199);
-  doc.setDrawColor(251, 191, 36);
+  doc.setFillColor(254, 243, 199); // amber-100
+  doc.setDrawColor(251, 191, 36); // amber-400
   doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(146, 64, 14);
+  doc.setTextColor(146, 64, 14); // amber-800
   doc.text('PRICING POLICY: Equipment rental includes up to 3 hours of operation. Usage beyond 3 hours incurs hourly rates.', margin + 3, y + 4.2);
 
   y += 9;
 
   // Equipment Line Items Table Header
-  doc.setFillColor(30, 41, 59);
+  doc.setFillColor(30, 41, 59); // slate-800
   doc.rect(margin, y, contentWidth, 7, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
@@ -299,9 +211,11 @@ export async function downloadQuotationPdf(
   doc.setFont('helvetica', 'normal');
 
   items.forEach((item, idx) => {
+    // Check page overflow
     if (y > pageHeight - 65) {
       doc.addPage();
       y = 14;
+      // Repeat small table header
       doc.setFillColor(30, 41, 59);
       doc.rect(margin, y, contentWidth, 6, 'F');
       doc.setFont('helvetica', 'bold');
@@ -319,16 +233,19 @@ export async function downloadQuotationPdf(
     doc.setDrawColor(226, 232, 240);
     doc.line(margin, y + 11, pageWidth - margin, y + 11);
 
+    // Number
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
     doc.text(String(idx + 1), margin + 3, y + 5);
 
+    // Product Title
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
     doc.text(item.product_name_snapshot || 'Equipment Item', margin + 10, y + 4.5);
 
+    // Duration breakdown line
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.8);
     doc.setTextColor(100, 116, 139);
@@ -339,24 +256,28 @@ export async function downloadQuotationPdf(
       : '3 hours standard duration';
     doc.text(`${item.category ? `${item.category} • ` : ''}${durationNote}`, margin + 10, y + 8.5);
 
+    // Quantity
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
     doc.text(String(item.quantity || 1), margin + 98, y + 5.5, { align: 'center' });
 
+    // Base Price
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     const baseP = item.base_price || item.unit_price || 0;
     doc.text(formatRs(baseP), margin + 124, y + 5.5, { align: 'right' });
 
+    // Additional charge
     if (addHrs > 0) {
-      doc.setTextColor(180, 83, 9);
+      doc.setTextColor(180, 83, 9); // amber-700
       doc.text(`+${formatRs(addRate * addHrs * item.quantity)}`, margin + 152, y + 5.5, { align: 'right' });
     } else {
-      doc.setTextColor(16, 185, 129);
+      doc.setTextColor(16, 185, 129); // emerald-500
       doc.text('Included (Rs. 0)', margin + 152, y + 5.5, { align: 'right' });
     }
 
+    // Item Total
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
@@ -367,7 +288,7 @@ export async function downloadQuotationPdf(
 
   y += 4;
 
-  // Bottom Section
+  // Bottom Section: Payment/Terms on left, Calculations on right
   const leftColW = 105;
   const rightColW = contentWidth - leftColW - 4;
   const rightColX = margin + leftColW + 4;
@@ -402,6 +323,7 @@ export async function downloadQuotationPdf(
   doc.line(rightColX + 3, calcY - 1, rightColX + rightColW - 3, calcY - 1);
   calcY += 1.5;
 
+  // Final Total
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -409,9 +331,10 @@ export async function downloadQuotationPdf(
   doc.text(formatRs(quote.total_amount), rightColX + rightColW - 3.5, calcY, { align: 'right' });
   calcY += 5;
 
+  // Advance Deposit (50%) & Balance
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
-  doc.setTextColor(180, 83, 9);
+  doc.setTextColor(180, 83, 9); // amber
   doc.text('Advance Deposit (50%):', rightColX + 3.5, calcY);
   doc.text(formatRs(quote.deposit_required), rightColX + rightColW - 3.5, calcY, { align: 'right' });
   calcY += 4.5;
@@ -435,10 +358,11 @@ export async function downloadQuotationPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.8);
   doc.setTextColor(71, 85, 105);
-  const payInstructions = st.payment_instructions || 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch';
+  const payInstructions = settings.payment_instructions || 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch';
   const splitPay = doc.splitTextToSize(payInstructions, leftColW - 7);
   doc.text(splitPay, margin + 3.5, y + 8.5);
 
+  // Terms and Conditions snippet
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(15, 23, 42);
@@ -447,7 +371,7 @@ export async function downloadQuotationPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.2);
   doc.setTextColor(100, 116, 139);
-  const termsText = st.quotation_terms || '1. 50% non-refundable advance deposit required to confirm event booking.\n2. Continuous power supply (230V) must be available within 20m of setup area.\n3. Flat grass or smooth surface free of sharp objects required.';
+  const termsText = settings.quotation_terms || '1. 50% non-refundable advance deposit required to confirm event booking.\n2. Continuous power supply (230V) must be available within 20m of setup area.\n3. Flat grass or smooth surface free of sharp objects required.';
   const splitTerms = doc.splitTextToSize(termsText, leftColW - 7);
   doc.text(splitTerms, margin + 3.5, y + 29.5);
 
@@ -460,77 +384,32 @@ export async function downloadQuotationPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text(st.quotation_footer || 'Thank you for choosing Kids Jump 4 Joy!', pageWidth / 2, y, { align: 'center' });
+  doc.text(settings.quotation_footer || 'Thank you for choosing Kids Jump 4 Joy! We look forward to making your celebration unforgettable.', pageWidth / 2, y, { align: 'center' });
   y += 3;
   doc.setFontSize(6);
   doc.setTextColor(148, 163, 184);
   doc.text(`Official Document Generated by Kids Jump 4 Joy ERP System • ${quoteNumber}`, pageWidth / 2, y, { align: 'center' });
 
-  const blob = doc.output('blob');
-  triggerFileDownload(blob, filename);
+  return Buffer.from(doc.output('arraybuffer'));
 }
 
-/**
- * Downloads invoice PDF directly to the user's computer
- */
-export async function downloadInvoicePdf(
+export function generateInvoicePdfBuffer(
   invoice: Invoice,
-  settings?: CompanyTemplateSettings,
-  customFilename?: string
-): Promise<void> {
-  const defaultSettings: CompanyTemplateSettings = {
-    company_name: 'Kids Jump 4 Joy',
-    tagline: 'Bouncy Castles & Party Equipment Rentals',
-    logo_url: '',
-    address: '12 Temple Road, Kurunegala, Sri Lanka',
-    phone: '+94 77 123 4567',
-    whatsapp: '+94 77 123 4567',
-    email: 'info@kidsjump4joy.lk',
-    reg_number: 'PV-123456',
-    primary_color: '#e11d48',
-    secondary_color: '#f43f5e',
-    quotation_header: 'EVENT QUOTATION',
-    invoice_header: 'TAX INVOICE',
-    quotation_terms: '',
-    invoice_terms: '1. Official payment receipt issued upon balance clearance.\n2. Inquiries regarding this invoice should quote the invoice number.\n3. Kids Jump 4 Joy is committed to safe and memorable celebrations.',
-    payment_instructions: 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch',
-    quotation_footer: '',
-    invoice_footer: 'Thank you for your business! Kids Jump 4 Joy brings endless joy to every celebration.',
-  };
-
-  const st = settings || defaultSettings;
-  const filename = customFilename || `${invoice.invoice_number}.pdf`;
-
-  // First try server endpoint
-  const invIdOrNum = invoice.id || invoice.invoice_number;
-  if (invIdOrNum) {
-    try {
-      const serverUrl = `/api/pdf/invoice/${encodeURIComponent(invIdOrNum)}`;
-      const res = await fetch(serverUrl);
-      if (res.ok) {
-        const blob = await res.blob();
-        triggerFileDownload(blob, filename);
-        return;
-      }
-    } catch (e) {
-      console.warn('Server invoice PDF endpoint fetch failed, generating client-side vector PDF:', e);
-    }
-  }
-
-  // Fallback: Client-side vector PDF
+  settings: CompanyTemplateSettings
+): Buffer {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
   });
 
-  const primaryColor = hexToRgb(st.primary_color);
+  const primaryColor = hexToRgb(settings.primary_color);
   const pageWidth = 210;
   const pageHeight = 297;
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
 
-  // Header band
+  // Top color accent band
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, pageWidth, 5, 'F');
 
@@ -548,18 +427,18 @@ export async function downloadInvoicePdf(
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text(st.company_name, margin + 13, y + 5);
+  doc.text(settings.company_name || 'Kids Jump 4 Joy', margin + 13, y + 5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(st.tagline, margin + 13, y + 9);
+  doc.text(settings.tagline || 'Bouncy Castles & Party Equipment Rentals', margin + 13, y + 9);
 
-  // Document Title
+  // Right-aligned Document Title & Metadata
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text(st.invoice_header, pageWidth - margin, y + 4, { align: 'right' });
+  doc.text(settings.invoice_header || 'TAX INVOICE', pageWidth - margin, y + 4, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
@@ -572,10 +451,11 @@ export async function downloadInvoicePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`${st.address}  |  Hotline: ${st.phone}`, margin, y);
+  doc.text(`${settings.address || 'Kurunegala, Sri Lanka'}  |  Hotline: ${settings.phone || '+94 77 123 4567'}`, margin, y);
   y += 3.5;
-  doc.text(`Email: ${st.email}${st.reg_number ? `  |  Reg: ${st.reg_number}` : ''}`, margin, y);
+  doc.text(`Email: ${settings.email || 'info@kidsjump4joy.lk'}${settings.reg_number ? `  |  Reg: ${settings.reg_number}` : ''}`, margin, y);
 
+  // Right-side Date & Status info
   const invDate = invoice.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
   doc.text(`Date: ${invDate}   |   Booking Ref: ${invoice.booking_number}`, pageWidth - margin, y, { align: 'right' });
 
@@ -601,7 +481,7 @@ export async function downloadInvoicePdf(
   const boxWidth = (contentWidth - 4) / 2;
   const boxHeight = 28;
 
-  // Customer Box
+  // Left: Customer Box
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
   doc.roundedRect(margin, y, boxWidth, boxHeight, 1.5, 1.5, 'FD');
@@ -626,7 +506,7 @@ export async function downloadInvoicePdf(
     doc.text(splitAddr, margin + 3.5, y + (invoice.customer_email ? 22 : 18));
   }
 
-  // Event Details Box
+  // Right: Event Details Box
   const rightBoxX = margin + boxWidth + 4;
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
@@ -749,6 +629,7 @@ export async function downloadInvoicePdf(
   doc.line(rightColX + 3, calcY - 1, rightColX + rightColW - 3, calcY - 1);
   calcY += 1.5;
 
+  // Invoice Total
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -756,9 +637,10 @@ export async function downloadInvoicePdf(
   doc.text(formatRs(invoice.total), rightColX + rightColW - 3.5, calcY, { align: 'right' });
   calcY += 5;
 
+  // Paid & Balance
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
-  doc.setTextColor(5, 150, 105);
+  doc.setTextColor(5, 150, 105); // emerald
   doc.text('Total Amount Paid:', rightColX + 3.5, calcY);
   doc.text(formatRs(invoice.amount_paid), rightColX + rightColW - 3.5, calcY, { align: 'right' });
   calcY += 4.5;
@@ -782,7 +664,7 @@ export async function downloadInvoicePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.8);
   doc.setTextColor(71, 85, 105);
-  const payInstructions = st.payment_instructions || 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch';
+  const payInstructions = settings.payment_instructions || 'Bank: Commercial Bank PLC\nAccount Name: Kids Jump 4 Joy (Pvt) Ltd\nAccount No: 1000 8923 4410\nBranch: Kurunegala Super Branch';
   const splitPay = doc.splitTextToSize(payInstructions, leftColW - 7);
   doc.text(splitPay, margin + 3.5, y + 8.5);
 
@@ -794,7 +676,7 @@ export async function downloadInvoicePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.2);
   doc.setTextColor(100, 116, 139);
-  const termsText = st.invoice_terms || '1. Official payment receipt issued upon balance clearance.\n2. Inquiries regarding this invoice should quote the invoice number.\n3. Kids Jump 4 Joy is committed to safe and memorable celebrations.';
+  const termsText = settings.invoice_terms || '1. Official payment receipt issued upon balance clearance.\n2. Inquiries regarding this invoice should quote the invoice number.\n3. Kids Jump 4 Joy is committed to safe and memorable celebrations.';
   const splitTerms = doc.splitTextToSize(termsText, leftColW - 7);
   doc.text(splitTerms, margin + 3.5, y + 29.5);
 
@@ -807,78 +689,11 @@ export async function downloadInvoicePdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text(st.invoice_footer || 'Thank you for your business!', pageWidth / 2, y, { align: 'center' });
+  doc.text(settings.invoice_footer || 'Thank you for your business! Kids Jump 4 Joy brings endless joy to every celebration.', pageWidth / 2, y, { align: 'center' });
   y += 3;
   doc.setFontSize(6);
   doc.setTextColor(148, 163, 184);
   doc.text(`Official Tax Invoice Generated by Kids Jump 4 Joy ERP System • ${invoice.invoice_number}`, pageWidth / 2, y, { align: 'center' });
 
-  const blob = doc.output('blob');
-  triggerFileDownload(blob, filename);
-}
-
-/**
- * Enhanced DOM element PDF downloader with fallback
- */
-export async function downloadElementAsPdf(
-  element: HTMLElement,
-  filename: string,
-  options?: { title?: string }
-): Promise<void> {
-  const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-
-  try {
-    // Dynamically load html2canvas only when needed
-    const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: 1200,
-    });
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.98);
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pdfWidth;
-    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pdfHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-    }
-
-    const blob = pdf.output('blob');
-    triggerFileDownload(blob, safeFilename);
-  } catch (err) {
-    console.error('html2canvas failed, attempting fallback download:', err);
-    // If element is a quotation or invoice doc, extract reference number and download via server
-    const docNumElement = element.querySelector('.font-mono.font-bold');
-    const docNum = docNumElement?.textContent?.trim() || safeFilename.replace('.pdf', '');
-    const isQuote = docNum.startsWith('QT-');
-    const isInv = docNum.startsWith('INV-');
-
-    if (isQuote) {
-      window.location.assign(`/api/pdf/quotation/${encodeURIComponent(docNum)}`);
-    } else if (isInv) {
-      window.location.assign(`/api/pdf/invoice/${encodeURIComponent(docNum)}`);
-    } else {
-      throw err;
-    }
-  }
+  return Buffer.from(doc.output('arraybuffer'));
 }

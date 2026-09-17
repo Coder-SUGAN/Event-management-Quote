@@ -13,8 +13,12 @@ import type {
   ItemAvailability,
   DashboardStats,
   LineItem,
+  PaymentType,
+  PaymentMethod,
+  PaymentStatus,
+  BookingStatus,
 } from '../src/types.ts';
-import { calculateEventDuration, calculateItemTotal } from '../src/lib/pricing.ts';
+import { calculateEventDuration, calculateItemTotal, generateQuotationName, formatToDDMMYYYY } from '../src/lib/pricing.ts';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -361,6 +365,8 @@ function getInitialData(): DatabaseSchema {
     {
       id: 'qt_1',
       quotation_number: 'QT-2026-00001',
+      quote_number: 'QT-2026-00001',
+      quote_name: generateQuotationName(sampleDate, 'John Perera'),
       customer_id: 'cust_1',
       customer_name: 'John Perera',
       customer_phone: '+94 77 234 5678',
@@ -393,6 +399,8 @@ function getInitialData(): DatabaseSchema {
     {
       id: 'qt_2',
       quotation_number: 'QT-2026-00002',
+      quote_number: 'QT-2026-00002',
+      quote_name: generateQuotationName(sampleDate, 'Nimal Fernando'),
       customer_id: 'cust_2',
       customer_name: 'Nimal Fernando',
       customer_phone: '+94 71 876 5432',
@@ -425,6 +433,8 @@ function getInitialData(): DatabaseSchema {
     {
       id: 'qt_3',
       quotation_number: 'QT-2026-00003',
+      quote_number: 'QT-2026-00003',
+      quote_name: generateQuotationName('2026-09-20', 'Anoma Jayasinghe'),
       customer_id: 'cust_3',
       customer_name: 'Anoma Jayasinghe',
       customer_phone: '+94 76 555 1234',
@@ -722,11 +732,15 @@ class DatabaseStore {
             }
           });
         }
-        // Ensure all quotations have version and version_history
+        // Ensure all quotations have version, version_history, quote_number, and quote_name
         if (Array.isArray(parsed.quotations)) {
           parsed.quotations.forEach((q: any) => {
             if (!q.version) q.version = 1;
             if (!q.version_history) q.version_history = [];
+            if (!q.quote_number) q.quote_number = q.quotation_number;
+            if (!q.quote_name) {
+              q.quote_name = generateQuotationName(q.event_date, q.customer_name);
+            }
           });
         }
         return parsed;
@@ -777,7 +791,22 @@ class DatabaseStore {
   public updateCustomer(id: string, updates: Partial<Customer>): Customer {
     const idx = this.data.customers.findIndex((c) => c.id === id);
     if (idx === -1) throw new Error('Customer not found');
+    const oldName = this.data.customers[idx].name;
     this.data.customers[idx] = { ...this.data.customers[idx], ...updates };
+
+    // If customer name is changed, update quotation name for quotations that are not finalized
+    if (updates.name && updates.name.trim() !== oldName.trim()) {
+      const cleanNewName = updates.name.trim().replace(/\s+/g, ' ');
+      this.data.quotations.forEach((q) => {
+        if (q.customer_id === id && q.status !== 'Converted to Booking') {
+          q.customer_name = cleanNewName;
+          q.quote_name = generateQuotationName(q.event_date, cleanNewName);
+          q.quote_number = q.quotation_number;
+          q.updated_at = new Date().toISOString();
+        }
+      });
+    }
+
     this.save();
     return this.data.customers[idx];
   }
@@ -976,16 +1005,23 @@ class DatabaseStore {
     const seq = String(this.data.counters.quotation).padStart(5, '0');
     const quotation_number = `QT-${year}-${seq}`;
 
+    // Clean customer name: trim unnecessary spaces
+    const cleanCustomerName = (input.customer.name || '').trim().replace(/\s+/g, ' ');
+    // Automatically generate human-readable quotation name: DD-MM-YYYY - Customer Name
+    const quote_name = generateQuotationName(input.event.date, cleanCustomerName);
+
     // Valid for 7 days
     const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const quotation: Quotation = {
       id: `qt_${Date.now()}`,
       quotation_number,
+      quote_number: quotation_number,
+      quote_name,
       version: 1,
       version_history: [],
       customer_id: custId,
-      customer_name: input.customer.name,
+      customer_name: cleanCustomerName,
       customer_phone: input.customer.phone,
       customer_whatsapp: input.customer.whatsapp || input.customer.phone,
       customer_email: input.customer.email,
@@ -1096,6 +1132,8 @@ class DatabaseStore {
       notes: quote.notes,
       terms_and_conditions: quote.terms_and_conditions,
       status: quote.status,
+      quote_number: quote.quote_number || quote.quotation_number,
+      quote_name: quote.quote_name || generateQuotationName(quote.event_date, quote.customer_name),
     };
 
     quote.version_history = quote.version_history || [];
@@ -1104,7 +1142,7 @@ class DatabaseStore {
 
     // Apply customer changes
     if (input.customer) {
-      if (input.customer.name) quote.customer_name = input.customer.name;
+      if (input.customer.name) quote.customer_name = input.customer.name.trim().replace(/\s+/g, ' ');
       if (input.customer.phone) quote.customer_phone = input.customer.phone;
       if (input.customer.whatsapp) quote.customer_whatsapp = input.customer.whatsapp;
       if (input.customer.email !== undefined) quote.customer_email = input.customer.email;
@@ -1199,6 +1237,10 @@ class DatabaseStore {
     if (input.notes !== undefined) quote.notes = input.notes;
     if (input.terms_and_conditions !== undefined) quote.terms_and_conditions = input.terms_and_conditions;
 
+    // Automatically recalculate quotation name: DD-MM-YYYY - Customer Name
+    quote.quote_number = quote.quotation_number;
+    quote.quote_name = generateQuotationName(quote.event_date, quote.customer_name);
+
     // Status: default to Revised or the explicitly provided status
     quote.status = input.status || 'Revised';
     quote.updated_at = new Date().toISOString();
@@ -1220,6 +1262,8 @@ class DatabaseStore {
       ...JSON.parse(JSON.stringify(orig)),
       id: `qt_${Date.now()}`,
       quotation_number,
+      quote_number: quotation_number,
+      quote_name: generateQuotationName(orig.event_date, orig.customer_name),
       version: 1,
       version_history: [],
       status: 'Draft',
@@ -1242,41 +1286,83 @@ class DatabaseStore {
     return quote;
   }
 
-  // --- Confirm Booking Workflow (Requirement #13) ---
+  // --- Confirm Booking Workflow (Requirement #13 & #14) ---
   // Quotation Created -> Quotation Sent -> Customer Pays -> Admin Verifies -> MARK AS PAID -> CONFIRM BOOKING
   // Generates Booking ID (BK-2026-XXXXX), Invoice ID (INV-2026-XXXXX), reserves equipment, updates daily schedule.
   public confirmBookingFromQuotation(
     quotationId: string,
     paymentDetails?: {
       amount: number;
-      payment_method: Payment['payment_method'];
-      transaction_reference: string;
+      payment_type?: PaymentType;
+      payment_method: PaymentMethod;
+      transaction_reference?: string;
+      reference_number?: string;
       payment_notes?: string;
+      notes?: string;
       payment_date?: string;
       payment_proof_name?: string;
+      payment_proof_url?: string;
+      created_by?: string;
     }
-  ): { booking: Booking; invoice: Invoice; payment?: Payment } {
+  ): { booking: Booking; invoice: Invoice; payment: Payment } {
     const quotation = this.getQuotation(quotationId);
     if (!quotation) throw new Error('Quotation not found');
 
-    if (quotation.status === 'Converted to Booking') {
-      const existingBooking = this.data.bookings.find((b) => b.quotation_id === quotation.id);
-      if (existingBooking) {
-        const inv = this.data.invoices.find((i) => i.booking_id === existingBooking.id);
-        return { booking: existingBooking, invoice: inv! };
-      }
+    const amountPaidNow = Number(paymentDetails?.amount ?? 0);
+    if (isNaN(amountPaidNow) || amountPaidNow <= 0) {
+      throw new Error('Please enter a valid payment amount greater than zero.');
     }
 
-    // Check availability one more time to prevent race conditions / double bookings
-    const availability = this.getAvailabilityForDate(quotation.event_date);
-    const availMap = new Map<string, number>();
-    availability.forEach((a) => availMap.set(a.product.id, a.available_quantity));
+    // Existing payments associated with this quotation or booking
+    const existingPayments = this.data.payments.filter(
+      (p) => p.quotation_id === quotation.id || (quotation.converted_booking_id && p.booking_id === quotation.converted_booking_id)
+    );
+    const alreadyPaid = existingPayments.reduce((sum, p) => sum + p.amount, 0);
+    const newTotalPaid = alreadyPaid + amountPaidNow;
 
+    const requiredDeposit = Number(
+      quotation.deposit_required || Math.round(quotation.total_amount * 0.5)
+    );
+
+    // Strict validation: Must reach required deposit to confirm booking
+    if (newTotalPaid < requiredDeposit) {
+      throw new Error(
+        'Required deposit has not been reached. Please enter a valid payment amount.'
+      );
+    }
+
+    // Check inventory availability considering date AND event time window overlap
     for (const item of quotation.items) {
-      const avail = availMap.get(item.product_id) ?? 0;
-      if (item.quantity > avail) {
+      const prod = this.getProduct(item.product_id);
+      const totalStock = prod ? prod.total_quantity : 1;
+
+      // Overlapping active bookings for the same product on the same date
+      const overlappingBookings = this.data.bookings.filter((b) => {
+        if (b.id === quotation.converted_booking_id) return false;
+        if (b.event_date !== quotation.event_date) return false;
+        if (b.status === 'Cancelled') return false;
+
+        const startA = quotation.event_start_time || '00:00';
+        const endA = quotation.event_end_time || '23:59';
+        const startB = b.event_start_time || '00:00';
+        const endB = b.event_end_time || '23:59';
+
+        // Overlap condition: startA < endB && endA > startB
+        return startA < endB && endA > startB;
+      });
+
+      const bookedInWindow = overlappingBookings.reduce((sum, b) => {
+        const it = b.items.find((bi) => bi.product_id === item.product_id);
+        return sum + (it ? it.quantity : 0);
+      }, 0);
+
+      const availableInWindow = totalStock - bookedInWindow;
+      if (item.quantity > availableInWindow) {
         throw new Error(
-          `Cannot confirm booking: ${item.quantity} units of "${item.product_name_snapshot}" required, but only ${avail} available on ${quotation.event_date}.`
+          `Cannot confirm booking: ${item.quantity}x "${item.product_name_snapshot}" requested, but only ${Math.max(
+            0,
+            availableInWindow
+          )} available during ${quotation.event_start_time}–${quotation.event_end_time} on ${quotation.event_date}.`
         );
       }
     }
@@ -1292,11 +1378,22 @@ class DatabaseStore {
     const invoiceSeq = String(this.data.counters.invoice).padStart(5, '0');
     const invoice_number = `INV-${year}-${invoiceSeq}`;
 
-    const bookingId = `bk_${Date.now()}`;
-    const amountPaid = Number(paymentDetails?.amount || quotation.deposit_required || 0);
-    const balance = Math.max(0, quotation.total_amount - amountPaid);
-    const paymentStatus =
-      amountPaid >= quotation.total_amount ? 'Paid' : amountPaid > 0 ? 'Partially Paid' : 'Unpaid';
+    const bookingId = quotation.converted_booking_id || `bk_${Date.now()}`;
+    const totalAmount = quotation.total_amount;
+    const remainingBalance = Math.max(0, totalAmount - newTotalPaid);
+
+    let paymentStatus: PaymentStatus = 'Deposit Paid';
+    if (newTotalPaid >= totalAmount) {
+      paymentStatus = 'Fully Paid';
+    } else if (newTotalPaid >= requiredDeposit) {
+      paymentStatus = 'Deposit Paid';
+    } else if (newTotalPaid > 0) {
+      paymentStatus = 'Partially Paid';
+    } else {
+      paymentStatus = 'Unpaid';
+    }
+
+    const bookingStatus: BookingStatus = 'Confirmed';
 
     const booking: Booking = {
       id: bookingId,
@@ -1331,10 +1428,13 @@ class DatabaseStore {
       discount: quotation.discount,
       total_amount: quotation.total_amount,
       deposit_required: quotation.deposit_required,
-      amount_paid: amountPaid,
-      balance,
-      status: 'Confirmed',
+      amount_paid: newTotalPaid,
+      balance: remainingBalance,
+      status: bookingStatus,
+      booking_status: bookingStatus,
       payment_status: paymentStatus,
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: paymentDetails?.created_by || 'Admin (Staff)',
       invoice_number,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1362,35 +1462,56 @@ class DatabaseStore {
       other_charges: quotation.other_charges,
       discount: quotation.discount,
       total: quotation.total_amount,
-      amount_paid: amountPaid,
-      balance,
+      amount_paid: newTotalPaid,
+      balance: remainingBalance,
       payment_method: paymentDetails?.payment_method || 'Bank Transfer',
       payment_date: paymentDetails?.payment_date || new Date().toISOString().split('T')[0],
-      status: paymentStatus === 'Paid' ? 'Paid' : paymentStatus === 'Partially Paid' ? 'Partially Paid' : 'Unpaid',
+      status: paymentStatus === 'Fully Paid' ? 'Paid' : 'Partially Paid',
       created_at: new Date().toISOString(),
     };
 
-    // 4. Record Payment if provided
-    let paymentRecord: Payment | undefined;
-    if (amountPaid > 0) {
-      paymentRecord = {
-        id: `pay_${Date.now()}`,
-        booking_id: bookingId,
-        booking_number,
-        quotation_id: quotation.id,
-        amount: amountPaid,
-        payment_date: paymentDetails?.payment_date || new Date().toISOString().split('T')[0],
-        payment_method: paymentDetails?.payment_method || 'Bank Transfer',
-        transaction_reference: paymentDetails?.transaction_reference || `DEP-${Date.now().toString().slice(-6)}`,
-        payment_notes: paymentDetails?.payment_notes || 'Advance deposit upon booking confirmation',
-        payment_proof_name: paymentDetails?.payment_proof_name,
-        payment_status: 'Paid',
-        created_at: new Date().toISOString(),
-      };
-      this.data.payments.unshift(paymentRecord);
-    }
+    // 4. Record Payment as a separate tracked record
+    const paymentId = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const paymentRecord: Payment = {
+      id: paymentId,
+      booking_id: bookingId,
+      booking_number,
+      quotation_id: quotation.id,
+      customer_id: quotation.customer_id,
+      customer_name: quotation.customer_name,
+      amount: amountPaidNow,
+      payment_type:
+        paymentDetails?.payment_type ||
+        (newTotalPaid >= totalAmount ? 'Full Payment' : 'Deposit'),
+      payment_method: paymentDetails?.payment_method || 'Bank Transfer',
+      payment_date:
+        paymentDetails?.payment_date || new Date().toISOString().split('T')[0],
+      transaction_reference:
+        paymentDetails?.transaction_reference ||
+        paymentDetails?.reference_number ||
+        `TXN-${Date.now().toString().slice(-6)}`,
+      reference_number:
+        paymentDetails?.reference_number ||
+        paymentDetails?.transaction_reference ||
+        `TXN-${Date.now().toString().slice(-6)}`,
+      payment_notes:
+        paymentDetails?.payment_notes ||
+        paymentDetails?.notes ||
+        'Advance deposit verified on booking confirmation',
+      notes:
+        paymentDetails?.notes ||
+        paymentDetails?.payment_notes ||
+        'Advance deposit verified on booking confirmation',
+      payment_proof_name: paymentDetails?.payment_proof_name,
+      payment_proof_url:
+        paymentDetails?.payment_proof_url || paymentDetails?.payment_proof_name,
+      payment_status: paymentStatus,
+      created_at: new Date().toISOString(),
+      created_by: paymentDetails?.created_by || 'Admin (Staff)',
+    };
+    this.data.payments.unshift(paymentRecord);
 
-    // 5. Update Daily Schedule with unique combination booking_id + product_id (Requirement #28)
+    // 5. Update Daily Schedule with unique combination booking_id + product_id
     for (const item of booking.items) {
       const scheduleId = `${booking.id}_${item.product_id}`;
       // Remove any previous record if exists
@@ -1413,14 +1534,31 @@ class DatabaseStore {
       });
     }
 
-    // 6. Update Quotation status and reference
-    quotation.status = 'Converted to Booking';
+    // 6. Update Quotation status, payment status, paid amount, and reference
+    quotation.status = 'Confirmed';
+    quotation.payment_status = paymentStatus;
+    quotation.amount_paid = newTotalPaid;
+    quotation.total_paid = newTotalPaid;
+    quotation.remaining_balance = remainingBalance;
     quotation.converted_booking_id = booking.id;
     quotation.updated_at = new Date().toISOString();
 
     // 7. Save into bookings and invoices
-    this.data.bookings.unshift(booking);
-    this.data.invoices.unshift(invoice);
+    // If existing booking already in array, replace it, else unshift
+    const existingBkIdx = this.data.bookings.findIndex((b) => b.id === booking.id);
+    if (existingBkIdx >= 0) {
+      this.data.bookings[existingBkIdx] = booking;
+    } else {
+      this.data.bookings.unshift(booking);
+    }
+
+    const existingInvIdx = this.data.invoices.findIndex((i) => i.booking_id === booking.id);
+    if (existingInvIdx >= 0) {
+      this.data.invoices[existingInvIdx] = invoice;
+    } else {
+      this.data.invoices.unshift(invoice);
+    }
+
     this.save();
 
     return { booking, invoice, payment: paymentRecord };
@@ -1888,8 +2026,10 @@ class DatabaseStore {
     );
     const quotations = this.data.quotations.filter(
       (qt) =>
-        qt.quotation_number.toLowerCase().includes(q) ||
+        (qt.quotation_number || qt.quote_number || '').toLowerCase().includes(q) ||
+        (qt.quote_name || '').toLowerCase().includes(q) ||
         qt.customer_name.toLowerCase().includes(q) ||
+        (qt.customer_phone || '').toLowerCase().includes(q) ||
         qt.event_location.toLowerCase().includes(q) ||
         qt.event_date.includes(q)
     );

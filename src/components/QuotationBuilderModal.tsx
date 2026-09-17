@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import type { Customer, Product, ItemAvailability, LineItem } from '../types.ts';
 import { fetchCustomers, fetchAvailability, createQuotation, formatCurrency } from '../lib/api.ts';
-import { calculateEventDuration, calculateItemTotal, calculateSingleItemPricing } from '../lib/pricing.ts';
+import { calculateEventDuration, calculateItemTotal, calculateSingleItemPricing, generateQuotationName } from '../lib/pricing.ts';
 
 interface QuotationBuilderModalProps {
   isOpen: boolean;
@@ -333,9 +333,16 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
           <div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 uppercase tracking-wider">
-              Step {step} of 3
-            </span>
+            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 uppercase tracking-wider">
+                Step {step} of 3
+              </span>
+              {(customerName.trim() || eventDate) && (
+                <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  Quotation Name: <strong className="text-white">{generateQuotationName(eventDate, customerName)}</strong>
+                </span>
+              )}
+            </div>
             <h2 className="text-lg font-bold text-white mt-1">Create Event Quotation</h2>
           </div>
           <button
@@ -1011,6 +1018,14 @@ export const QuotationBuilderModal: React.FC<QuotationBuilderModalProps> = ({
                   className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 text-rose-600 font-semibold"
                 />
               </div>
+            </div>
+
+            {/* Auto Quotation Name Display */}
+            <div className="p-3 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-medium">Automatic Quotation Name:</span>
+              <span className="font-mono font-bold text-slate-900 bg-white px-2.5 py-1 rounded border border-slate-300">
+                {generateQuotationName(eventDate, customerName)}
+              </span>
             </div>
 
             {/* Calculation Totals */}

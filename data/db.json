@@ -1,6 +1,13 @@
 {
   "customers": [
     {
+      "id": "cust_1789617637683_zd1o",
+      "name": "  Kamal Perera  ",
+      "phone": "+94 77 999 8888",
+      "whatsapp": "+94 77 999 8888",
+      "created_at": "2026-09-17T04:00:37.684Z"
+    },
+    {
       "id": "cust_1789537190673_ntjk",
       "name": "suga suganthan",
       "phone": "+94 77 234 5678",
@@ -152,6 +159,115 @@
   ],
   "quotations": [
     {
+      "id": "qt_1789617637685",
+      "quotation_number": "QT-2026-00007",
+      "quote_number": "QT-2026-00007",
+      "quote_name": "25-09-2026 - Kamal Perera",
+      "version": 1,
+      "version_history": [],
+      "customer_id": "cust_1789617637683_zd1o",
+      "customer_name": "Kamal Perera",
+      "customer_phone": "+94 77 999 8888",
+      "customer_whatsapp": "+94 77 999 8888",
+      "event_date": "2026-09-25",
+      "event_start_time": "14:00",
+      "event_end_time": "18:00",
+      "event_duration_minutes": 240,
+      "event_duration_formatted": "4 hours",
+      "included_hours": 3,
+      "additional_hours": 1,
+      "event_location": "Kandy",
+      "number_of_guests": 0,
+      "special_requirements": "",
+      "notes": "",
+      "items": [
+        {
+          "id": "qitem_1789617637684_0",
+          "product_id": "prod_1",
+          "product_name_snapshot": "Large Bouncy Castle",
+          "quantity": 1,
+          "unit_price": 25000,
+          "base_price": 25000,
+          "additional_hourly_rate": 5000,
+          "additional_hours": 1,
+          "base_total": 25000,
+          "additional_total": 5000,
+          "discount": 0,
+          "total": 30000,
+          "category": "Bouncy Castles"
+        }
+      ],
+      "subtotal": 30000,
+      "delivery_fee": 2000,
+      "setup_fee": 1000,
+      "transport_fee": 0,
+      "other_charges": 0,
+      "discount": 0,
+      "total_amount": 33000,
+      "deposit_required": 16500,
+      "remaining_balance": 16500,
+      "status": "Sent",
+      "valid_until": "2026-09-24",
+      "created_at": "2026-09-17T04:00:37.685Z",
+      "updated_at": "2026-09-17T04:00:37.685Z"
+    },
+    {
+      "id": "qt_1789617212304",
+      "quotation_number": "QT-2026-00006",
+      "version": 1,
+      "version_history": [],
+      "customer_id": "cust_1789537190673_ntjk",
+      "customer_name": "suga suganthan",
+      "customer_phone": "+94 77 234 5678",
+      "customer_whatsapp": "+94 77 234 5678",
+      "customer_email": "john.perera@gmail.com",
+      "customer_address": "12 Temple Road, Kurunegala",
+      "event_date": "2026-09-18",
+      "event_start_time": "10:00",
+      "event_end_time": "15:00",
+      "event_duration_minutes": 300,
+      "event_duration_formatted": "5 hours",
+      "included_hours": 3,
+      "additional_hours": 2,
+      "event_location": "Modera,Colombo 15",
+      "event_type": "Kids Birthday Party",
+      "number_of_guests": 50,
+      "special_requirements": "",
+      "notes": "",
+      "items": [
+        {
+          "id": "qitem_1789617212304_0",
+          "product_id": "prod_2",
+          "product_name_snapshot": "Small Bouncy Castle",
+          "quantity": 1,
+          "unit_price": 15000,
+          "base_price": 15000,
+          "additional_hourly_rate": 3000,
+          "additional_hours": 2,
+          "base_total": 15000,
+          "additional_total": 6000,
+          "discount": 0,
+          "total": 21000,
+          "category": "Bouncy Castles"
+        }
+      ],
+      "subtotal": 21000,
+      "delivery_fee": 3500,
+      "setup_fee": 1500,
+      "transport_fee": 0,
+      "other_charges": 0,
+      "discount": 0,
+      "total_amount": 26000,
+      "deposit_required": 13000,
+      "remaining_balance": 13000,
+      "status": "Sent",
+      "valid_until": "2026-09-24",
+      "created_at": "2026-09-17T03:53:32.304Z",
+      "updated_at": "2026-09-17T03:53:32.304Z",
+      "quote_number": "QT-2026-00006",
+      "quote_name": "18-09-2026 - suga suganthan"
+    },
+    {
       "id": "qt_1789537297912",
       "quotation_number": "QT-2026-00005",
       "customer_id": "cust_1789537190673_ntjk",
@@ -202,7 +318,11 @@
       "status": "Sent",
       "valid_until": "2026-09-23",
       "created_at": "2026-09-16T05:41:37.912Z",
-      "updated_at": "2026-09-16T05:41:37.912Z"
+      "updated_at": "2026-09-16T05:41:37.912Z",
+      "version": 1,
+      "version_history": [],
+      "quote_number": "QT-2026-00005",
+      "quote_name": "17-09-2026 - suga suganthan"
     },
     {
       "id": "qt_1789537190674",
@@ -275,7 +395,11 @@
       "status": "Sent",
       "valid_until": "2026-09-23",
       "created_at": "2026-09-16T05:39:50.674Z",
-      "updated_at": "2026-09-16T05:39:50.674Z"
+      "updated_at": "2026-09-16T05:39:50.674Z",
+      "version": 1,
+      "version_history": [],
+      "quote_number": "QT-2026-00004",
+      "quote_name": "17-09-2026 - suga suganthan"
     },
     {
       "id": "qt_1",
@@ -338,7 +462,11 @@
       "status": "Converted to Booking",
       "valid_until": "2026-09-14",
       "created_at": "2026-09-01T08:30:00.000Z",
-      "updated_at": "2026-09-01T10:30:00.000Z"
+      "updated_at": "2026-09-01T10:30:00.000Z",
+      "version": 1,
+      "version_history": [],
+      "quote_number": "QT-2026-00001",
+      "quote_name": "15-09-2026 - John Perera"
     },
     {
       "id": "qt_2",
@@ -401,7 +529,11 @@
       "status": "Converted to Booking",
       "valid_until": "2026-09-14",
       "created_at": "2026-09-02T10:00:00.000Z",
-      "updated_at": "2026-09-02T12:15:00.000Z"
+      "updated_at": "2026-09-02T12:15:00.000Z",
+      "version": 1,
+      "version_history": [],
+      "quote_number": "QT-2026-00002",
+      "quote_name": "15-09-2026 - Nimal Fernando"
     },
     {
       "id": "qt_3",
@@ -454,7 +586,11 @@
       "status": "Awaiting Payment",
       "valid_until": "2026-09-18",
       "created_at": "2026-09-03T08:00:00.000Z",
-      "updated_at": "2026-09-03T08:00:00.000Z"
+      "updated_at": "2026-09-03T08:00:00.000Z",
+      "version": 1,
+      "version_history": [],
+      "quote_number": "QT-2026-00003",
+      "quote_name": "20-09-2026 - Anoma Jayasinghe"
     }
   ],
   "bookings": [
@@ -861,7 +997,7 @@
     "invoice_footer": "Kids Jump 4 Joy (Pvt) Ltd - Official Event Invoice. Thank you for your business!"
   },
   "counters": {
-    "quotation": 5,
+    "quotation": 7,
     "booking": 2,
     "invoice": 2
   }

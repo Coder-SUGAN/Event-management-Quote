@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { db } from './server/db.ts';
+import { generateQuotationPdfBuffer, generateInvoicePdfBuffer } from './server/pdf.ts';
 
 dotenv.config();
 
@@ -206,23 +207,59 @@ app.patch('/api/quotations/:id/status', (req, res) => {
   }
 });
 
+// --- Quotation PDF Download Endpoint ---
+app.get('/api/pdf/quotation/:id', (req, res) => {
+  try {
+    const quote = db.getQuotation(req.params.id);
+    if (!quote) return res.status(404).json({ error: 'Quotation not found' });
+    const settings = db.getTemplateSettings();
+    const pdfBuffer = generateQuotationPdfBuffer(quote, settings);
+    const rawNumber = quote.quote_number || quote.quotation_number || 'Quotation';
+    const filename = `${rawNumber}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('PDF Quotation generation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate quotation PDF' });
+  }
+});
+
 // --- Confirm Booking from Quotation (Requirement #13 & #14) ---
 app.post('/api/quotations/:id/confirm-booking', (req, res) => {
   try {
-    const { amount, payment_method, transaction_reference, payment_notes, payment_date, payment_proof_name } =
-      req.body || {};
+    const {
+      amount,
+      payment_type,
+      payment_method,
+      transaction_reference,
+      reference_number,
+      payment_notes,
+      notes,
+      payment_date,
+      payment_proof_name,
+      payment_proof_url,
+      created_by,
+    } = req.body || {};
 
     const result = db.confirmBookingFromQuotation(req.params.id, {
       amount: Number(amount || 0),
+      payment_type,
       payment_method: payment_method || 'Bank Transfer',
-      transaction_reference: transaction_reference || `TXN-${Date.now().toString().slice(-6)}`,
-      payment_notes,
+      transaction_reference: transaction_reference || reference_number,
+      reference_number: reference_number || transaction_reference,
+      payment_notes: payment_notes || notes,
+      notes: notes || payment_notes,
       payment_date: payment_date || new Date().toISOString().split('T')[0],
       payment_proof_name,
+      payment_proof_url,
+      created_by: created_by || 'Admin (Staff)',
     });
 
     res.json({
-      message: 'Booking successfully confirmed! Equipment officially reserved.',
+      message: 'Payment recorded successfully. Booking confirmed.',
       ...result,
     });
   } catch (error: any) {
@@ -354,6 +391,25 @@ app.get('/api/invoices/:id', (req, res) => {
     res.json(invoice);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Invoice PDF Download Endpoint ---
+app.get('/api/pdf/invoice/:id', (req, res) => {
+  try {
+    const invoice = db.getInvoice(req.params.id);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    const settings = db.getTemplateSettings();
+    const pdfBuffer = generateInvoicePdfBuffer(invoice, settings);
+    const filename = `${invoice.invoice_number || 'Invoice'}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('PDF Invoice generation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate invoice PDF' });
   }
 });
 

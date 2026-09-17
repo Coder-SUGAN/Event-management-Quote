@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { X, Printer, Send, Mail, Download, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { X, Printer, Send, Mail, Download, CheckCircle, Clock, Loader2, Check } from 'lucide-react';
 import type { Quotation, Invoice, CompanyTemplateSettings } from '../types.ts';
 import { formatCurrency, generateWhatsAppUrl } from '../lib/api.ts';
-import { downloadElementAsPdf } from '../lib/pdfGenerator.ts';
+import { downloadQuotationPdf, downloadInvoicePdf, downloadElementAsPdf } from '../lib/pdfGenerator.ts';
+import { generateQuotationName } from '../lib/pricing.ts';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   if (!isOpen || !data) return null;
 
@@ -56,15 +58,28 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   };
 
   const handleDownloadPdf = async () => {
-    if (!printRef.current) return;
     try {
       setIsDownloadingPdf(true);
       const filename = `${docNumber || (isQuote ? 'Quotation' : 'Invoice')}.pdf`;
-      await downloadElementAsPdf(printRef.current, filename);
+
+      if (isQuote && quote) {
+        await downloadQuotationPdf(quote, templateSettings, filename);
+      } else if (!isQuote && inv) {
+        await downloadInvoicePdf(inv, templateSettings, filename);
+      } else if (printRef.current) {
+        await downloadElementAsPdf(printRef.current, filename);
+      }
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3000);
     } catch (err) {
-      console.error('Failed to generate PDF download:', err);
-      // Fallback to browser print dialog
-      window.print();
+      console.error('Failed to generate PDF download, falling back to direct server download:', err);
+      const targetId = isQuote ? (quote?.id || quote?.quotation_number) : (inv?.id || inv?.invoice_number);
+      if (targetId) {
+        window.location.assign(`/api/pdf/${isQuote ? 'quotation' : 'invoice'}/${encodeURIComponent(targetId)}`);
+      } else {
+        window.print();
+      }
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -104,12 +119,21 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
             <button
               onClick={handleDownloadPdf}
               disabled={isDownloadingPdf}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition shadow-sm disabled:opacity-50"
+              className={`inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50 ${
+                downloadSuccess
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+              }`}
             >
               {isDownloadingPdf ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Generating PDF...</span>
+                  <span>Downloading PDF...</span>
+                </>
+              ) : downloadSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span>Downloaded to Computer!</span>
                 </>
               ) : (
                 <>
@@ -176,6 +200,14 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
                   <span className="text-slate-400">Reference No:</span>{' '}
                   <span className="font-mono font-bold text-slate-900 text-sm">{docNumber}</span>
                 </p>
+                {isQuote && (
+                  <p>
+                    <span className="text-slate-400">Quotation Name:</span>{' '}
+                    <span className="font-semibold text-slate-900">
+                      {quote?.quote_name || generateQuotationName(eventDate, customerName)}
+                    </span>
+                  </p>
+                )}
                 <p>
                   <span className="text-slate-400">Issued Date:</span>{' '}
                   <span className="font-medium text-slate-800">{docDate}</span>

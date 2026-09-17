@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS products (
 -- 4. QUOTATIONS TABLE
 CREATE TABLE IF NOT EXISTS quotations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    quotation_number VARCHAR(50) UNIQUE NOT NULL, -- e.g. QT-2026-00001
+    quotation_number VARCHAR(50) UNIQUE NOT NULL, -- e.g. QT-2026-00001 (or quote_number)
+    quote_name TEXT, -- e.g. 17-09-2026 - Suga Sugantahan (Format: DD-MM-YYYY - Customer Name)
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     customer_name VARCHAR(255) NOT NULL,
     customer_phone VARCHAR(50) NOT NULL,

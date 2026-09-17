@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { FileCheck, Search, Printer, Eye, Download, Send } from 'lucide-react';
+import { FileCheck, Search, Printer, Eye, Download, Send, Loader2 } from 'lucide-react';
 import type { Invoice } from '../types.ts';
 import { formatCurrency, generateWhatsAppUrl } from '../lib/api.ts';
+import { downloadInvoicePdf } from '../lib/pdfGenerator.ts';
 
 interface InvoicesListProps {
   invoices: Invoice[];
@@ -10,6 +11,19 @@ interface InvoicesListProps {
 
 export const InvoicesList: React.FC<InvoicesListProps> = ({ invoices, onPreviewInvoice }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [downloadingInvId, setDownloadingInvId] = useState<string | null>(null);
+
+  const handleDirectDownload = async (e: React.MouseEvent, inv: Invoice) => {
+    e.stopPropagation();
+    try {
+      setDownloadingInvId(inv.id);
+      await downloadInvoicePdf(inv);
+    } catch (err) {
+      console.error('Failed to download invoice PDF:', err);
+    } finally {
+      setDownloadingInvId(null);
+    }
+  };
 
   const filtered = invoices.filter((i) => {
     return (
@@ -107,6 +121,18 @@ export const InvoicesList: React.FC<InvoicesListProps> = ({ invoices, onPreviewI
                             className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDirectDownload(e, inv)}
+                            title="Download Invoice PDF to Computer"
+                            disabled={downloadingInvId === inv.id}
+                            className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition disabled:opacity-50"
+                          >
+                            {downloadingInvId === inv.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                            ) : (
+                              <Download className="w-4 h-4" />
+                            )}
                           </button>
                           <a
                             href={waUrl}

@@ -319,3 +319,61 @@ export function calculateQuotationTotals(params: {
     remainingBalance,
   };
 }
+
+/**
+ * Formats a date string (YYYY-MM-DD or other formats) into DD-MM-YYYY format.
+ * Example: '2026-09-17' -> '17-09-2026'
+ */
+export function formatToDDMMYYYY(dateStr: string): string {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const trimmed = dateStr.trim();
+  // Check for YYYY-MM-DD
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    return `${day}-${month}-${year}`;
+  }
+  // Check for DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${day}-${month}-${year}`;
+  }
+  // Try Date object parsing
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  return trimmed;
+}
+
+/**
+ * Automatically generates human-readable quotation name based on:
+ * EVENT DATE + CUSTOMER NAME
+ * Format: DD-MM-YYYY - Customer Name
+ * Examples:
+ * 17-09-2026 - Suga Sugantahan
+ * 25-09-2026 - Kamal Perera
+ * 03-10-2026 - Nimal Fernando
+ *
+ * Rules:
+ * - Uses actual event date from the quotation (DD-MM-YYYY)
+ * - Uses the customer's current name from the customer record
+ * - Trims unnecessary spaces from the customer name
+ * - Preserves quotation number (e.g. QT-2026-00006) separately
+ */
+export function generateQuotationName(eventDate: string, customerName: string): string {
+  const formattedDate = formatToDDMMYYYY(eventDate);
+  const cleanName = (customerName || '').trim().replace(/\s+/g, ' ');
+  if (!formattedDate && !cleanName) return 'Untitled Quotation';
+  if (!formattedDate) return cleanName;
+  if (!cleanName) return formattedDate;
+  return `${formattedDate} - ${cleanName}`;
+}
