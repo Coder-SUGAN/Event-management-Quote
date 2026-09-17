@@ -52,33 +52,50 @@ app.get('/api/products', (req, res) => {
 
 app.post('/api/products', (req, res) => {
   try {
-    const { name, category, total_quantity, unit_price, additional_hourly_rate, description, dimensions, power_required } = req.body;
+    const { name, category, total_quantity, unit_price, additional_hourly_rate, description, dimensions, power_required, status } = req.body || {};
     if (!name || total_quantity === undefined || unit_price === undefined) {
       return res.status(400).json({ error: 'Name, total_quantity, and unit_price are required' });
     }
     const product = db.createProduct({
-      name,
-      category: category || 'General',
-      total_quantity: Number(total_quantity),
-      unit_price: Number(unit_price),
-      additional_hourly_rate: Number(additional_hourly_rate || 0),
-      description: description || '',
-      dimensions: dimensions || '',
-      power_required: power_required || '',
-      status: 'active',
+      name: String(name).trim(),
+      category: category || 'Bouncy Castles',
+      total_quantity: Math.max(1, Number(total_quantity) || 1),
+      unit_price: Math.max(0, Number(unit_price) || 0),
+      additional_hourly_rate: Math.max(0, Number(additional_hourly_rate || 0)),
+      description: description ? String(description).trim() : '',
+      dimensions: dimensions ? String(dimensions).trim() : '',
+      power_required: power_required ? String(power_required).trim() : '',
+      status: status === 'maintenance' ? 'maintenance' : 'active',
     });
     res.status(201).json(product);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'Failed to create product' });
   }
 });
 
 app.put('/api/products/:id', (req, res) => {
   try {
-    const updated = db.updateProduct(req.params.id, req.body);
+    const updates = { ...(req.body || {}) };
+    if (updates.name) updates.name = String(updates.name).trim();
+    if (updates.total_quantity !== undefined) updates.total_quantity = Math.max(1, Number(updates.total_quantity) || 1);
+    if (updates.unit_price !== undefined) updates.unit_price = Math.max(0, Number(updates.unit_price) || 0);
+    if (updates.additional_hourly_rate !== undefined) updates.additional_hourly_rate = Math.max(0, Number(updates.additional_hourly_rate) || 0);
+    const updated = db.updateProduct(req.params.id, updates);
     res.json(updated);
   } catch (error: any) {
-    res.status(404).json({ error: error.message });
+    res.status(404).json({ error: error.message || 'Product not found' });
+  }
+});
+
+app.delete('/api/products/:id', (req, res) => {
+  try {
+    const success = db.deleteProduct(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json({ success: true, id: req.params.id });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to delete product' });
   }
 });
 

@@ -838,6 +838,14 @@ class DatabaseStore {
     return this.data.products[idx];
   }
 
+  public deleteProduct(id: string): boolean {
+    const idx = this.data.products.findIndex((p) => p.id === id);
+    if (idx === -1) return false;
+    this.data.products.splice(idx, 1);
+    this.save();
+    return true;
+  }
+
   // --- Date-Based Inventory Availability ---
   // Calculates: Total Inventory - Confirmed Bookings for Date = Available Inventory
   public getAvailabilityForDate(date: string): ItemAvailability[] {

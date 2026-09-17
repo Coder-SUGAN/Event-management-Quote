@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Package, Plus, Search, Edit2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Package, Plus, Search, Edit2, CheckCircle, AlertCircle, X, Trash2, Loader2 } from 'lucide-react';
 import type { Product } from '../types.ts';
-import { formatCurrency, createProduct, updateProduct } from '../lib/api.ts';
+import { formatCurrency, createProduct, updateProduct, deleteProduct } from '../lib/api.ts';
 
 interface ProductsManagerProps {
   products: Product[];
@@ -16,23 +16,24 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
   // Form states
   const [name, setName] = useState<string>('');
   const [category, setCategory] = useState<string>('Bouncy Castles');
-  const [totalQuantity, setTotalQuantity] = useState<number>(1);
-  const [unitPrice, setUnitPrice] = useState<number>(15000);
-  const [additionalHourlyRate, setAdditionalHourlyRate] = useState<number>(3000);
+  const [totalQuantity, setTotalQuantity] = useState<string>('1');
+  const [unitPrice, setUnitPrice] = useState<string>('15000');
+  const [additionalHourlyRate, setAdditionalHourlyRate] = useState<string>('3000');
   const [description, setDescription] = useState<string>('');
   const [dimensions, setDimensions] = useState<string>('');
   const [powerRequired, setPowerRequired] = useState<string>('');
   const [status, setStatus] = useState<'active' | 'maintenance'>('active');
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const openAddModal = () => {
     setEditingProduct(null);
     setName('');
     setCategory('Bouncy Castles');
-    setTotalQuantity(1);
-    setUnitPrice(15000);
-    setAdditionalHourlyRate(3000);
+    setTotalQuantity('1');
+    setUnitPrice('15000');
+    setAdditionalHourlyRate('3000');
     setDescription('');
     setDimensions('');
     setPowerRequired('');
@@ -45,9 +46,9 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
     setEditingProduct(p);
     setName(p.name);
     setCategory(p.category);
-    setTotalQuantity(p.total_quantity);
-    setUnitPrice(p.unit_price);
-    setAdditionalHourlyRate(p.additional_hourly_rate ?? Math.round(p.unit_price * 0.2));
+    setTotalQuantity(String(p.total_quantity));
+    setUnitPrice(String(p.unit_price));
+    setAdditionalHourlyRate(String(p.additional_hourly_rate ?? Math.round(p.unit_price * 0.2)));
     setDescription(p.description || '');
     setDimensions(p.dimensions || '');
     setPowerRequired(p.power_required || '');
@@ -56,43 +57,72 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
     setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      setError('Product name is required');
+  const handleDeleteProduct = async (p: Product) => {
+    if (!window.confirm(`Are you sure you want to remove "${p.name}" from the equipment inventory?`)) {
       return;
     }
     try {
+      setDeletingId(p.id);
+      await deleteProduct(p.id);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete equipment item');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setError('Equipment name is required');
+      return;
+    }
+
+    const parsedQty = parseInt(totalQuantity, 10);
+    if (isNaN(parsedQty) || parsedQty < 1) {
+      setError('Total warehouse units must be at least 1');
+      return;
+    }
+
+    const parsedBasePrice = parseFloat(unitPrice);
+    if (isNaN(parsedBasePrice) || parsedBasePrice < 0) {
+      setError('Base price (up to 3 hours) must be a valid positive amount');
+      return;
+    }
+
+    const parsedExtraRate = parseFloat(additionalHourlyRate);
+    if (isNaN(parsedExtraRate) || parsedExtraRate < 0) {
+      setError('Additional 1-hour charge must be a valid non-negative amount');
+      return;
+    }
+
+    try {
       setSaving(true);
+      setError(null);
+
+      const payload = {
+        name: cleanName,
+        category,
+        total_quantity: parsedQty,
+        unit_price: parsedBasePrice,
+        additional_hourly_rate: parsedExtraRate,
+        description: description.trim(),
+        dimensions: dimensions.trim(),
+        power_required: powerRequired.trim(),
+        status,
+      };
+
       if (editingProduct) {
-        await updateProduct(editingProduct.id, {
-          name,
-          category,
-          total_quantity: totalQuantity,
-          unit_price: unitPrice,
-          additional_hourly_rate: additionalHourlyRate,
-          description,
-          dimensions,
-          power_required: powerRequired,
-          status,
-        });
+        await updateProduct(editingProduct.id, payload);
       } else {
-        await createProduct({
-          name,
-          category,
-          total_quantity: totalQuantity,
-          unit_price: unitPrice,
-          additional_hourly_rate: additionalHourlyRate,
-          description,
-          dimensions,
-          power_required: powerRequired,
-          status,
-        });
+        await createProduct(payload);
       }
       setIsModalOpen(false);
       onRefresh();
     } catch (err: any) {
-      setError(err.message || 'Failed to save product');
+      setError(err?.message || 'Failed to save equipment item. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -115,55 +145,59 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
             Manage Kids Jump 4 Joy equipment assets, rental rates, specifications, and total inventory pool.
           </p>
         </div>
-
         <button
           onClick={openAddModal}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition"
         >
           <Plus className="w-4 h-4" />
           <span>Add Equipment Item</span>
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Search products by title or category..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 outline-hidden"
-        />
+      {/* Filter and Search */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search equipment by name or category..."
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+          />
+        </div>
+        <div className="text-xs text-slate-500 font-semibold">
+          Showing {filtered.length} of {products.length} items
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+      {/* Products Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Equipment Name</th>
-                <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4 text-center">Total Units</th>
-                <th className="py-3 px-4 text-right">Base Price (Up to 3 Hours)</th>
-                <th className="py-3 px-4 text-right">Additional 1 Hour Charge</th>
-                <th className="py-3 px-4">Dimensions & Power</th>
+              <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[10px]">
+                <th className="py-3 px-4">Item & Category</th>
+                <th className="py-3 px-4 text-center">Warehouse Stock</th>
+                <th className="py-3 px-4 text-right">Base Price (≤3h)</th>
+                <th className="py-3 px-4 text-right">+Per Extra Hour</th>
+                <th className="py-3 px-4">Specs & Power</th>
                 <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Action</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 font-medium">
               {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/60 transition">
+                <tr key={p.id} className="hover:bg-slate-50/70 transition">
                   <td className="py-3.5 px-4">
-                    <span className="font-bold text-slate-900 block">{p.name}</span>
-                    {p.description && (
-                      <span className="text-[11px] text-slate-500 line-clamp-1">{p.description}</span>
-                    )}
+                    <span className="font-bold text-slate-900 block text-sm">{p.name}</span>
+                    <span className="text-[10px] text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md font-semibold inline-block mt-0.5">
+                      {p.category}
+                    </span>
                   </td>
-                  <td className="py-3.5 px-4 font-medium text-slate-700">{p.category}</td>
                   <td className="py-3.5 px-4 text-center">
-                    <span className="font-mono text-sm font-black px-2.5 py-0.5 rounded bg-slate-100 text-slate-800">
-                      {p.total_quantity}
+                    <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-800 font-bold rounded-lg">
+                      {p.total_quantity} Units
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right">
@@ -180,7 +214,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                   </td>
                   <td className="py-3.5 px-4 text-slate-600 text-[11px]">
                     <p>{p.dimensions || '—'}</p>
-                    <p className="text-slate-400">{p.power_required}</p>
+                    <p className="text-slate-400">{p.power_required || 'Standard 230V'}</p>
                   </td>
                   <td className="py-3.5 px-4 text-center">
                     <span
@@ -194,15 +228,37 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => openEditModal(p)}
-                      className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-end space-x-1">
+                      <button
+                        onClick={() => openEditModal(p)}
+                        title="Edit Equipment"
+                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(p)}
+                        disabled={deletingId === p.id}
+                        title="Delete Equipment Item"
+                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition disabled:opacity-40"
+                      >
+                        {deletingId === p.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    No equipment found matching &quot;{searchTerm}&quot;
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -211,12 +267,13 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
       {/* Modal Add / Edit */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white shrink-0">
               <h3 className="font-bold text-base">
                 {editingProduct ? 'Edit Equipment Item' : 'Add New Equipment Item'}
               </h3>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
               >
@@ -224,10 +281,20 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
               {error && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
-                  {error}
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start justify-between gap-2">
+                  <div className="flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                    <span>{error}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setError(null)}
+                    className="text-rose-400 hover:text-rose-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
 
@@ -239,7 +306,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Large Bouncy Castle"
+                  placeholder="e.g. Butterfly Bouncy Castle"
                   required
                   className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden"
                 />
@@ -271,7 +338,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     type="number"
                     min="1"
                     value={totalQuantity}
-                    onChange={(e) => setTotalQuantity(Number(e.target.value))}
+                    onChange={(e) => setTotalQuantity(e.target.value)}
                     required
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden"
                   />
@@ -295,7 +362,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     min="0"
                     step="100"
                     value={unitPrice}
-                    onChange={(e) => setUnitPrice(Number(e.target.value))}
+                    onChange={(e) => setUnitPrice(e.target.value)}
                     required
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden font-semibold"
                   />
@@ -313,7 +380,7 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                     min="0"
                     step="50"
                     value={additionalHourlyRate}
-                    onChange={(e) => setAdditionalHourlyRate(Number(e.target.value))}
+                    onChange={(e) => setAdditionalHourlyRate(e.target.value)}
                     required
                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-rose-500 outline-hidden font-semibold text-rose-600"
                   />
@@ -376,20 +443,22 @@ export const ProductsManager: React.FC<ProductsManagerProps> = ({ products, onRe
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  disabled={saving}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition"
+                  className="inline-flex items-center space-x-1.5 px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : editingProduct ? 'Update Equipment' : 'Add Equipment'}
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{saving ? 'Saving...' : editingProduct ? 'Update Equipment' : 'Add Equipment'}</span>
                 </button>
               </div>
             </form>

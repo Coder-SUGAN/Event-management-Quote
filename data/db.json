@@ -155,6 +155,18 @@
       "description": "2 active speakers, mixer, 2 wireless mics, Bluetooth and aux inputs",
       "power_required": "500W (230V)",
       "status": "active"
+    },
+    {
+      "id": "prod_1789618870371_xzi0",
+      "name": "Butterfly Bouncy",
+      "category": "Bouncy Castles",
+      "total_quantity": 1,
+      "unit_price": 7500,
+      "additional_hourly_rate": 1500,
+      "description": "",
+      "dimensions": "8x8X6ft",
+      "power_required": "13 AMP , A 10m Wire code will be provided",
+      "status": "active"
     }
   ],
   "quotations": [
